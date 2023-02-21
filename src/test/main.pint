@@ -1,11 +1,12 @@
 let main() -> unit {
   print("Hello World!");
+  print(factorial(5));
 }
 
 let x: int := 42;
 
 let factorial(n: int) -> int {
-  if n not >= 1 then {
+  if n not <= 1 then {
     n * factorial(n - 1)
   } else {
     1

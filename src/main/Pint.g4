@@ -11,14 +11,15 @@ type : ID               #simpleType
      | type 'when' expr #conditionType
      | 'unit'           #unitType
      ;
-expr : assignExpr ;
-assignExpr : left=orExpr (op=(':=' | ':+=' | ':-=' | ':*=' | ':/=') right=assignExpr)? ;
-orExpr : left=andExpr (op='or' right=orExpr)? ;
-andExpr : left=cmpExpr (op='and' right=andExpr)? ;
-cmpExpr : left=addExpr (not='not'? op=('=' | '<' | '>' | '<=' | '>=') right=cmpExpr)? ;
-addExpr : left=mulExpr (op=('+' | '-') right=addExpr)? ;
-mulExpr : left=unaryExpr (op=('*' | '/') right=mulExpr)? ;
-unaryExpr : ops+=('+' | '-' | 'not')* factor ;
+expr : factor                                                             #factorExpr
+     | op=('+' | '-' | 'not') expr                                        #unaryExpr
+     | left=expr op=('*' | '/') right=expr                                #mulExpr
+     | left=expr op=('+' | '-') right=expr                                #addExpr
+     | left=expr not='not'? op=('=' | '<' | '>' | '<=' | '>=') right=expr #cmpExpr
+     | left=expr op='and' right=expr                                      #andExpr
+     | left=expr op='or' right=expr                                       #orExpr
+     | left=expr op=(':=' | ':+=' | ':-=' | ':*=' | ':/=') right=expr     #assignExpr
+     ;
 factor : labeledBlockExpr #labeledBlockFactor
        | '(' expr ')'     #parensFactor
        | '|' expr '|'     #absFactor
@@ -49,4 +50,6 @@ ID : [A-Za-z_][A-Za-z0-9_]* ;
 INT_LITERAL : [0-9]+ ;
 STRING_LITERAL : '"' ~["]* '"' ;
 
+COMMENT : '/*' (~'*' | '*' ~'/' | COMMENT)* '*/' -> skip ;
+LINE_COMMENT : '//' ~[\r\n]* -> skip ;
 WS : [ \t\r\n]+ -> skip ;

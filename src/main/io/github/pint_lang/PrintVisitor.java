@@ -104,92 +104,76 @@ public class PrintVisitor extends PintBaseVisitor<Void> {
   }
   
   @Override
-  public Void visitExpr(ExprContext ctx) {
-    ctx.assignExpr().accept(this);
+  public Void visitFactorExpr(FactorExprContext ctx) {
+    ctx.factor().accept(this);
     return null;
   }
   
   @Override
-  public Void visitAssignExpr(AssignExprContext ctx) {
-    ctx.left.accept(this);
-    if (ctx.right != null) {
-      out.print(" ");
-      out.print(ctx.op.getText());
-      out.print(" ");
-      ctx.right.accept(this);
-    }
-    return null;
-  }
-  
-  @Override
-  public Void visitOrExpr(OrExprContext ctx) {
-    ctx.left.accept(this);
-    if (ctx.right != null) {
-      out.print(" ");
-      out.print(ctx.op.getText());
-      out.print(" ");
-      ctx.right.accept(this);
-    }
-    return null;
-  }
-  
-  @Override
-  public Void visitAndExpr(AndExprContext ctx) {
-    ctx.left.accept(this);
-    if (ctx.right != null) {
-      out.print(" ");
-      out.print(ctx.op.getText());
-      out.print(" ");
-      ctx.right.accept(this);
-    }
-    return null;
-  }
-  
-  @Override
-  public Void visitCmpExpr(CmpExprContext ctx) {
-    ctx.left.accept(this);
-    if (ctx.right != null) {
-      out.print(" ");
-      if (ctx.not != null) out.print("not ");
-      out.print(ctx.op.getText());
-      out.print(" ");
-      ctx.right.accept(this);
-    }
-    return null;
-  }
-  
-  @Override
-  public Void visitAddExpr(AddExprContext ctx) {
-    ctx.left.accept(this);
-    if (ctx.right != null) {
-      out.print(" ");
-      out.print(ctx.op.getText());
-      out.print(" ");
-      ctx.right.accept(this);
-    }
+  public Void visitUnaryExpr(UnaryExprContext ctx) {
+    out.print(ctx.op.getText());
+    ctx.expr().accept(this);
     return null;
   }
   
   @Override
   public Void visitMulExpr(MulExprContext ctx) {
     ctx.left.accept(this);
-    if (ctx.right != null) {
-      out.print(" ");
-      out.print(ctx.op.getText());
-      out.print(" ");
-      ctx.right.accept(this);
-    }
+    out.print(" ");
+    out.print(ctx.op.getText());
+    out.print(" ");
+    ctx.right.accept(this);
     return null;
   }
   
   @Override
-  public Void visitUnaryExpr(UnaryExprContext ctx) {
-    for (var op : ctx.ops) {
-      var text = op.getText();
-      out.print(text);
-      out.print(" ");
-    }
-    ctx.factor().accept(this);
+  public Void visitAddExpr(AddExprContext ctx) {
+    ctx.left.accept(this);
+    out.print(" ");
+    out.print(ctx.op.getText());
+    out.print(" ");
+    ctx.right.accept(this);
+    return null;
+  }
+  
+  @Override
+  public Void visitCmpExpr(CmpExprContext ctx) {
+    ctx.left.accept(this);
+    out.print(" ");
+    if (ctx.not != null) out.print("not ");
+    out.print(ctx.op.getText());
+    out.print(" ");
+    ctx.right.accept(this);
+    return null;
+  }
+  
+  @Override
+  public Void visitAndExpr(AndExprContext ctx) {
+    ctx.left.accept(this);
+    out.print(" ");
+    out.print(ctx.op.getText());
+    out.print(" ");
+    ctx.right.accept(this);
+    return null;
+  }
+  
+  @Override
+  public Void visitOrExpr(OrExprContext ctx) {
+    ctx.left.accept(this);
+    out.print(" ");
+    out.print(ctx.op.getText());
+    out.print(" ");
+    ctx.right.accept(this);
+    return null;
+  }
+  
+  @Override
+  public Void visitAssignExpr(AssignExprContext ctx) {
+    ctx.left.accept(this);
+    out.print(" ");
+    out.print(ctx.op.getText());
+    out.print(" ");
+    ctx.right.accept(this);
     return null;
   }
   
