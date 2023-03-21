@@ -1,13 +1,19 @@
 package io.github.pint_lang;
 
+
 import com.ibm.icu.impl.InvalidFormatException;
 
+
+
 import io.github.pint_lang.gen.PintBaseVisitor;
+
 
 import io.github.pint_lang.gen.PintParser.*;
 
 
+
 import org.antlr.v4.runtime.tree.*;
+
 
 import java.io.PrintStream;
 import java.util.HashMap;
@@ -18,8 +24,8 @@ public class NormalVisitor extends PintBaseVisitor<Void>
 {
 
     // LinkedList to hold tokens, not sure if this is needed.
-    private HashMap<String, String> VariableType = new HashMap<>();
-    private HashMap<String, String> VariableValues = new HashMap<>();
+    private final HashMap<String, String> SymbolType= new HashMap<>();
+    private final HashMap<String, String> VariableValues = new HashMap<>();
  //   int count = 1;
     
     public PrintStream out;
@@ -72,8 +78,8 @@ public class NormalVisitor extends PintBaseVisitor<Void>
         out.print(ctx.ID().getText());
         out.print(": ");
         ctx.type().accept(this);
-        if(!VariableType.containsKey(ctx.ID().getText())){
-            VariableType.put(ctx.ID().getText(), ctx.type().getText());
+        if(!SymbolType.containsKey(ctx.ID().getText())){
+            SymbolType.put(ctx.ID().getText(), ctx.type().getText());
         }
         out.print(" := ");
         ctx.expr().accept(this);
@@ -101,13 +107,14 @@ public class NormalVisitor extends PintBaseVisitor<Void>
                 num+=Integer.parseInt(VariableValues.get(Val));
                 putFinalVal = true;
             }
-            else{
-                num+=Integer.parseInt(Val);
+            else if(isANumber(Val)){
+                putFinalVal = true;
+                num += Integer.parseInt(Val);
             }
+
         }
         if(putFinalVal){
-            //var previousNum = Integer.parseInt(VariableValues.get(ctx.ID().getText()));
-            //previousNum +=num;
+
          VariableValues.put(ctx.ID().getText(),String.valueOf(num));
         }
         else{
@@ -195,8 +202,8 @@ public class NormalVisitor extends PintBaseVisitor<Void>
         out.print(ctx.op.getText());
         out.print(" ");
         ctx.right.accept(this);
-        boolean isValid = false;
-        Integer finalValue =0;
+
+        int finalValue =0;
         if(VariableValues.containsKey(ctx.left.getText())){
 
             finalValue += Integer.parseInt(VariableValues.get(ctx.left.getText()));
@@ -237,9 +244,9 @@ public class NormalVisitor extends PintBaseVisitor<Void>
                 case "-" -> finalValue -= Integer.parseInt(ctx.right.getText());
             }
         }
-        for(var key:VariableType.keySet()){
+        for(var key:SymbolType.keySet()){
             if(!VariableValues.containsKey(key)){
-                VariableValues.put(key, finalValue.toString());
+                VariableValues.put(key, Integer.toString(finalValue));
             }
 
         }
@@ -512,23 +519,7 @@ public class NormalVisitor extends PintBaseVisitor<Void>
         return null;
     }
 
-    /*
 
-    public void walk(ParseTreeListener listener, ParseTree T, ExprContext Context){
-       if( T instanceof ErrorNode){
-           listener.visitErrorNode((ErrorNode) T);
-           return;
-       } else if (T instanceof TerminalNode) {
-           listener.visitTerminal((TerminalNode) T);
-           return;
-       }
-       RuleNode R = (RuleNode) T;
-
-
-
-    }
-
-     */
 
     public boolean isANumber(String number){
         try {
@@ -542,10 +533,42 @@ public class NormalVisitor extends PintBaseVisitor<Void>
 
     }
 
+    // separate typeCheck Method ()
+    // expression is the context to which a variable potentially exists.
+    /*
+    public boolean typeCheck2(Object Expression, Value ExpectedType){
+        if(Expression instanceof Boolean B1){
+            return ExpectedType.equals(Value.of(B1));
+        }
+        if(Expression instanceof Integer I1){
+            return ExpectedType.equals(Value.of(I1));
+        }
+        if(Expression instanceof AddExprContext context){
+
+            return typeCheck2(context.left, ExpectedType) && typeCheck2(context.right, ExpectedType);
+        }
+        if(Expression instanceof MulExprContext context){
+            return typeCheck2(context.left, ExpectedType) && typeCheck2(context.right, ExpectedType);
+        }
+        if(Expression instanceof VarDefContext context){
+            var type = SymbolType.get(context.ID().getText());
+            return type.equals("int") && (ExpectedType.getClass().toString().equalsIgnoreCase("Integer"));
+        }
+        
+
+
+        return false;
+
+    }
+
+     */
+
+
     public  void typeCheck(Object ctx){
         //out.print("\n");
        if(ctx==null)
            return;
+
        if(ctx instanceof LiteralContext Ctx){
            try {
 
