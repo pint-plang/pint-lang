@@ -20,13 +20,13 @@
             <artifactId>antlr4</artifactId>
             <version>4.11.1</version>
         </dependency>
-        <!--
+
         <dependency>
             <groupId>org.bytedeco</groupId>
             <artifactId>llvm-platform</artifactId>
             <version>15.0.3-1.5.8</version>
         </dependency>
-        -->
+
     </dependencies>
 
     <build>
