@@ -1,5 +1,6 @@
 package io.github.pint_lang;
 
+import io.github.pint_lang.ast.ASTConversionVisitor;
 import io.github.pint_lang.eval.*;
 import io.github.pint_lang.gen.PintLexer;
 import io.github.pint_lang.gen.PintParser;
@@ -29,6 +30,8 @@ public class Main {
     var parser = new PintParser(tokens);
     var file = parser.file();
     file.accept(new PrintVisitor(System.err));
+    System.out.println("-----------------------------------");
+    file.accept(new ASTConversionVisitor()).accept(new ASTPrintVisitor(System.err));
     System.out.println();
     var global = new GlobalScope();
     global.defineFunction("print", (exprEval, vargs) -> {
