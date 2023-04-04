@@ -1,5 +1,6 @@
 package io.github.pint_lang;
 
+import io.github.pint_lang.ast.ASTConversionVisitor;
 import io.github.pint_lang.codegen.DefCodeGenVisitor;
 import io.github.pint_lang.codegen.ExprCodeGenVisitor;
 import io.github.pint_lang.codegen.GlobalLoader;
@@ -8,6 +9,7 @@ import io.github.pint_lang.gen.PintLexer;
 import io.github.pint_lang.gen.PintParser;
 import io.github.pint_lang.eval.ExprEvalControlFlow.*;
 
+import io.github.pint_lang.typechecker.*;
 import org.antlr.v4.runtime.CharStreams;
 import org.antlr.v4.runtime.CommonTokenStream;
 import org.bytedeco.javacpp.PointerPointer;
@@ -16,6 +18,7 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 
 import static org.bytedeco.llvm.global.LLVM.*;
 
@@ -37,10 +40,32 @@ public class Main {
     {
       file.accept(new PrintVisitor(System.err));
     }
+    System.out.println("-----------------------------------");
+    {
+      file.accept(new ASTConversionVisitor()).accept(new ASTPrintVisitor(System.err));
+    }
+    System.out.println("-----------------------------------");
+    {
+      var logger = new ErrorLogger<>(Type.ERROR);
+      var typeEval = new TypeEvalVisitor(logger);
+      var globals = new GlobalLookup();
+      addPrints(globals, logger);
+      var defs = new ASTConversionVisitor().visitFile(file);
+      new TypecheckVisitor(typeEval, globals).visitDefs(defs);
+      if (!logger.dumpErrors(System.err)) System.out.println("No type errors detected");
+    }
     System.out.println();
     {
       var global = new GlobalScope();
       global.defineFunction("print", (exprEval, vargs) -> {
+        for (var arg : vargs) System.out.println(arg.valueToString());
+        return Value.UNIT;
+      });
+      global.defineFunction("prints", (exprEval, vargs) -> {
+        for (var arg : vargs) System.out.println(arg.valueToString());
+        return Value.UNIT;
+      });
+      global.defineFunction("printi", (exprEval, vargs) -> {
         for (var arg : vargs) System.out.println(arg.valueToString());
         return Value.UNIT;
       });
@@ -89,6 +114,11 @@ public class Main {
       loader.codeGen(new ExprCodeGenVisitor(context, module, builder));
       LLVMDumpModule(module);
     }
+  }
+  
+  private static void addPrints(GlobalLookup globals, ErrorLogger<?> logger) {
+    globals.addFunction("prints", new GlobalLookup.FunctionType(Type.UNIT, List.of(new GlobalLookup.Param("s", Type.STRING))), logger);
+    globals.addFunction("printi", new GlobalLookup.FunctionType(Type.UNIT, List.of(new GlobalLookup.Param("i", Type.INT))), logger);
   }
   
 }

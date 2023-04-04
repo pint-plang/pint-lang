@@ -1,6 +1,6 @@
 let main() -> unit {
-  print("Hello World!");
-  print(factorial(5));
+  prints("Hello World!");
+  printi(factorial(5));
 }
 
 let x: int := 42;

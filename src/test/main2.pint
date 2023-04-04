@@ -1,0 +1,8 @@
+
+let main() -> unit {
+let a: int := 4;
+let b: int := 3;
+let x: int := a + 2;
+
+  print(x);
+}

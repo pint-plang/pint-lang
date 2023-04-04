@@ -7,9 +7,9 @@ varDef : 'let' ID ':' type ':=' expr ';' ;
 paramList : (param ',')* param? ;
 param : ID ':' type ;
 type : ID               #simpleType
+     | 'unit'           #unitType
      | type '[' ']'     #arrayType
      | type 'when' expr #conditionType
-     | 'unit'           #unitType
      ;
 expr : factor                                                             #factorExpr
      | op=('+' | '-' | 'not') expr                                        #unaryExpr
@@ -44,7 +44,7 @@ jumpExpr : jump=('return' | 'break' | 'continue') atLabel? expr? ;
 atLabel : '@' ID ;
 indexOp : '[' expr ']' ;
 arrayLiteral : '[' (expr ',')* expr? ']' ;
-literal : int=INT_LITERAL | string=STRING_LITERAL | bool=('true' | 'false') | unit='unit' ;
+literal : string=STRING_LITERAL | int=INT_LITERAL | bool=('true' | 'false') | unit='unit' ;
 
 ID : [A-Za-z_][A-Za-z0-9_]* ;
 INT_LITERAL : [0-9]+ ;
