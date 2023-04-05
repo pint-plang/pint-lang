@@ -12,9 +12,9 @@ public interface ExprASTVisitor<T, R> {
   
   R visitBlockExpr(BlockExprAST<T> ast);
   
-  R visitVarExprAST(VarExprAST<T> ast);
+  R visitVarExpr(VarExprAST<T> ast);
   
-  R visitFuncCall(FuncCallExprAST<T> ast);
+  R visitFuncCallExpr(FuncCallExprAST<T> ast);
   
   R visitIndexExpr(IndexExprAST<T> ast);
   

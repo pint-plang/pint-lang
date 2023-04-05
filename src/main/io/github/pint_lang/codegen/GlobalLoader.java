@@ -1,6 +1,7 @@
 package io.github.pint_lang.codegen;
 
-import io.github.pint_lang.gen.PintParser;
+import io.github.pint_lang.ast.ExprAST;
+import io.github.pint_lang.typechecker.Type;
 import org.bytedeco.javacpp.PointerPointer;
 import org.bytedeco.llvm.LLVM.LLVMValueRef;
 
@@ -15,11 +16,11 @@ public class GlobalLoader {
   private final ArrayList<Function> functions = new ArrayList<>();
   private final ArrayList<Variable> variables = new ArrayList<>();
   
-  public void addFunction(LLVMValueRef function, HashMap<String, LLVMValueRef> params, PintParser.BlockExprContext body) {
+  public void addFunction(LLVMValueRef function, HashMap<String, LLVMValueRef> params, ExprAST<Type> body) {
     functions.add(new Function(function, params, body));
   }
   
-  public void addVariable(LLVMValueRef variable, PintParser.ExprContext initializer) {
+  public void addVariable(LLVMValueRef variable, ExprAST<Type> initializer) {
     variables.add(new Variable(variable, initializer));
   }
   
@@ -46,22 +47,22 @@ public class GlobalLoader {
       var name = LLVMGetValueName(variable.variable).getString();
       var value = variable.initializer.accept(visitor);
       LLVMBuildStore(visitor.builder, value, variable.variable);
-      visitor.loaderContext.initiailzedVars.add(name);
+      visitor.loaderContext.initializedVars.add(name);
     }
     visitor.loaderContext.uncheckInitialized();
     LLVMBuildRetVoid(visitor.builder);
   }
   
-  public record Function(LLVMValueRef function, HashMap<String, LLVMValueRef> params, PintParser.BlockExprContext body) {}
+  public record Function(LLVMValueRef function, HashMap<String, LLVMValueRef> params, ExprAST<Type> body) {}
   
-  public record Variable(LLVMValueRef variable, PintParser.ExprContext initializer) {}
+  public record Variable(LLVMValueRef variable, ExprAST<Type> initializer) {}
   
   public static class Context {
     
     private boolean inFunction = false;
     private HashMap<String, LLVMValueRef> params = null;
     private boolean checkInitialized = false;
-    private final HashSet<String> initiailzedVars = new HashSet<>();
+    private final HashSet<String> initializedVars = new HashSet<>();
     
     public Context() {}
     
@@ -71,15 +72,11 @@ public class GlobalLoader {
     
     private void uncheckInitialized() {
       checkInitialized = false;
-      initiailzedVars.clear();
+      initializedVars.clear();
     }
     
-    public boolean isVariableInitialized(String name) {
-      return !checkInitialized || initiailzedVars.contains(name);
-    }
-    
-    public void initializeVariable(String name) {
-      if (checkInitialized) initiailzedVars.add(name);
+    public boolean isVariableUninitialized(String name) {
+      return checkInitialized && !initializedVars.contains(name);
     }
     
     public LLVMValueRef getParam(String name) {

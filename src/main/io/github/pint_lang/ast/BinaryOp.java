@@ -22,6 +22,20 @@ public enum BinaryOp {
   ADD, // +
   SUB, // -
   MUL, // *
-  DIV // /
+  DIV; // /
+  
+  public boolean shortCircuits() {
+    return switch (this) {
+      case OR, AND -> true;
+      default -> isAssign();
+    };
+  }
+  
+  public boolean isAssign() {
+    return switch (this) {
+      case ASSIGN, ADD_ASSIGN, SUB_ASSIGN, MUL_ASSIGN, DIV_ASSIGN -> true;
+      default -> false;
+    };
+  }
   
 }

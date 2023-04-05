@@ -29,13 +29,13 @@ public abstract class ExprDelegateStatASTVisitor<T, R> implements StatASTVisitor
   }
   
   @Override
-  public R visitVarExprAST(VarExprAST<T> ast) {
-    return expr.visitVarExprAST(ast);
+  public R visitVarExpr(VarExprAST<T> ast) {
+    return expr.visitVarExpr(ast);
   }
   
   @Override
-  public R visitFuncCall(FuncCallExprAST<T> ast) {
-    return expr.visitFuncCall(ast);
+  public R visitFuncCallExpr(FuncCallExprAST<T> ast) {
+    return expr.visitFuncCallExpr(ast);
   }
   
   @Override

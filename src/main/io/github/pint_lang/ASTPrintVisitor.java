@@ -114,13 +114,13 @@ public class ASTPrintVisitor implements ASTVisitor<Void, Void> {
   }
   
   @Override
-  public Void visitVarExprAST(VarExprAST<Void> ast) {
+  public Void visitVarExpr(VarExprAST<Void> ast) {
     out.print(ast.name());
     return null;
   }
   
   @Override
-  public Void visitFuncCall(FuncCallExprAST<Void> ast) {
+  public Void visitFuncCallExpr(FuncCallExprAST<Void> ast) {
     out.print(ast.funcName());
     out.print("(");
     for (var arg : ast.args()) {

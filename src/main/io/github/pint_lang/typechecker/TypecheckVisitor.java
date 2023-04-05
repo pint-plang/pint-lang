@@ -4,7 +4,7 @@ import io.github.pint_lang.ast.*;
 
 import java.util.ArrayList;
 
-public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisitor<Void, ExprAST<Type>> {
+public class TypecheckVisitor implements DefASTVisitor<Void, DefAST<Type>>, ExprASTVisitor<Void, ExprAST<Type>> {
   
   public final TypeEvalVisitor typeEval;
   public final ErrorLogger<Type> logger;
@@ -23,30 +23,30 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
     this.varStack = new VarScopeStack();
   }
   
-  public void visitDefs(DefsAST<Void> ast) {
+  public DefsAST<Type> visitDefs(DefsAST<Void> ast) {
     for (var def : ast.defs()) {
       if (def instanceof FuncDefAST<Void>) def.accept(globalsBuilder);
     }
-    for (var def : ast.defs()) def.accept(this);
+    return new DefsAST<>(ast.defs().stream().map(this::visitDef).toList(), null);
   }
   
   @Override
-  public Void visitFuncDef(FuncDefAST<Void> ast) {
+  public FuncDefAST<Type> visitFuncDef(FuncDefAST<Void> ast) {
     var funcType = globals.getFunctionType(ast.name());
     globals.setThisFunctionType(funcType);
-    var value = ast.body().accept(this);
-    if (!value.data().canBe(funcType.returnType())) logger.error("Tried to return wrong type");
+    var body = ast.body().accept(this);
+    if (!body.data().canBe(funcType.returnType())) logger.error("Tried to return wrong type");
     globals.setThisFunctionType(null);
-    return null;
+    return new FuncDefAST<>(ast.name(), ast.params().stream().map(param -> new FuncDefAST.Param<>(param.name(), param.type().accept(typeEval))).toList(), ast.returnType().accept(typeEval), body, null);
   }
   
   @Override
-  public Void visitVarDef(VarDefAST<Void> ast) {
-    var type = ast.type().accept(typeEval).data();
+  public VarDefAST<Type> visitVarDef(VarDefAST<Void> ast) {
+    var type = ast.type().accept(typeEval);
     var value = ast.value().accept(this);
-    if (!value.data().canBe(type)) logger.error("Tried to initialize a variable with the wrong type");
+    if (!value.data().canBe(type.data())) logger.error("Tried to initialize a variable with the wrong type");
     ast.accept(globalsBuilder);
-    return null;
+    return new VarDefAST<>(ast.name(), type, value, null);
   }
   
   @Override
@@ -112,7 +112,7 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
   }
   
   @Override
-  public VarExprAST<Type> visitVarExprAST(VarExprAST<Void> ast) {
+  public VarExprAST<Type> visitVarExpr(VarExprAST<Void> ast) {
     var name = ast.name();
     var local = varStack.getVar(name);
     if (local != null) return new VarExprAST<>(name, local);
@@ -124,7 +124,7 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
   }
   
   @Override
-  public FuncCallExprAST<Type> visitFuncCall(FuncCallExprAST<Void> ast) {
+  public FuncCallExprAST<Type> visitFuncCallExpr(FuncCallExprAST<Void> ast) {
     var funcType = globals.getFunctionType(ast.funcName());
     var args = ast.args().stream().map(this::visitExpr).toList();
     if (funcType == null) return new FuncCallExprAST<>(ast.funcName(), args, logger.error("No such function as '" + ast.funcName() + "'"));
@@ -260,7 +260,7 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
   
   private class StatVisitor extends ExprDelegateStatASTVisitor<Void, StatAST<Type>> {
     
-    public StatVisitor() {
+    private StatVisitor() {
       super(TypecheckVisitor.this);
     }
     

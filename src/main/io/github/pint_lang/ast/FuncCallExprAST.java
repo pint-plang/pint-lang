@@ -6,7 +6,7 @@ public record FuncCallExprAST<T>(String funcName, List<ExprAST<T>> args, T data)
   
   @Override
   public <R> R accept(ExprASTVisitor<T, R> visitor) {
-    return visitor.visitFuncCall(this);
+    return visitor.visitFuncCallExpr(this);
   }
   
 }

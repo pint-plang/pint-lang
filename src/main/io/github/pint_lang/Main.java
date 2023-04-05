@@ -104,13 +104,24 @@ public class Main {
       System.out.println("Successfully returned from main()");
     }
     System.out.println();
-    {
+    llvm: {
+      var logger = new ErrorLogger<>(Type.ERROR);
+      var typeEval = new TypeEvalVisitor(logger);
+      var globals = new GlobalLookup();
+      addPrints(globals, logger);
+      var defsUntyped = new ASTConversionVisitor().visitFile(file);
+      var typechecker = new TypecheckVisitor(typeEval, globals);
+      var defsTyped = typechecker.visitDefs(defsUntyped);
+      if (logger.dumpErrors(System.err)) break llvm;
       var context = LLVMContextCreate();
       var module = LLVMModuleCreateWithNameInContext("main", context);
       var builder = LLVMCreateBuilderInContext(context);
       var loader = new GlobalLoader();
       LLVMAddFunction(module, "print", LLVMFunctionType(LLVMVoidTypeInContext(context), (PointerPointer<?>) null, 0, 1));
-      file.accept(new DefCodeGenVisitor(context, module, loader));
+      LLVMAddFunction(module, "prints", LLVMFunctionType(LLVMVoidTypeInContext(context), (PointerPointer<?>) null, 0, 1));
+      LLVMAddFunction(module, "printi", LLVMFunctionType(LLVMVoidTypeInContext(context), (PointerPointer<?>) null, 0, 1));
+      var codeGenVisitor = new DefCodeGenVisitor(context, module, loader);
+      codeGenVisitor.visitDefs(defsTyped);
       loader.codeGen(new ExprCodeGenVisitor(context, module, builder));
       LLVMDumpModule(module);
     }
