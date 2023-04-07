@@ -1,6 +1,14 @@
 let main() -> unit {
   prints("Hello World!");
   printi(factorial(5));
+  let x: int := 1;
+  let arr: int[] := [42, 17];
+  if x >= 0 and x < |arr| then {
+    let y: int when it >= 0 and it < |arr| := x;
+    printi(arr[x]);
+  } else {
+    prints(":(");
+  }
 }
 
 let x: int := 42;

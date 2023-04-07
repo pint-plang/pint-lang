@@ -239,7 +239,7 @@ public class ASTPrintVisitor implements ASTVisitor<Void, Void> {
   }
   
   @Override
-  public Void acceptNopStat(NopStatAST<Void> ast) {
+  public Void visitNopStat(NopStatAST<Void> ast) {
     out.print(";");
     return null;
   }

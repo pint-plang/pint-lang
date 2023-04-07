@@ -1,5 +1,7 @@
 package io.github.pint_lang.typechecker;
 
+import io.github.pint_lang.ast.ExprAST;
+
 public sealed interface Type {
   
   Type
@@ -26,7 +28,11 @@ public sealed interface Type {
     public Type unify(Type other, ErrorLogger<Type> logger) {
       return other == this || other == Type.NEVER ? this : other == Type.ERROR ? other : logger.error("Failed to unify types '" + this + "' and '" + other + "'");
     }
-    
+
+    @Override
+    public Type.Array asArray() {
+      return null;
+    }
     
     @Override
     public String toString() {
@@ -61,7 +67,14 @@ public sealed interface Type {
       };
     }
   
-  
+    @Override
+    public Type.Array asArray() {
+      return switch (this) {
+        case ERROR -> null;
+        case NEVER -> new Array(Type.NEVER);
+      };
+    }
+
     @Override
     public String toString() {
       return switch (this) {
@@ -86,14 +99,49 @@ public sealed interface Type {
     public Type unify(Type other, ErrorLogger<Type> logger) {
       return other instanceof Array otherArray ? new Array(elementType.unify(otherArray.elementType, logger)) : other == Type.NEVER ? this : other == Type.ERROR ? other : logger.error("Failed to unify types '" + this + "' and '" + other + "'");
     }
-    
+
+    @Override
+    public Type.Array asArray() {
+      return this;
+    }
+
     @Override
     public String toString() {
       return elementType.toString() + "[]";
     }
     
   }
-  
+
+  record Condition(Type type, ExprAST<Type> condition) implements Type {
+
+    public Condition {
+      if (type == null) throw new NullPointerException("type must not be null");
+    }
+
+    @Override
+    public boolean canBe(Type other) {
+      return this.equals(other) || type.canBe(other) || other == Type.NEVER;
+    }
+
+    @Override
+    public Type unify(Type other, ErrorLogger<Type> logger) {
+      return this.equals(other) ? this :
+             other instanceof Condition otherCondition ? this.type.unify(otherCondition.type, logger) :
+             this.type.unify(other, logger);
+    }
+
+    @Override
+    public Type.Array asArray() {
+      return type.asArray();
+    }
+
+    @Override
+    public Type unconditional() {
+      return type.unconditional();
+    }
+
+  }
+
   // NOTE: this relationship will become a lot more important once type conditions exist
   boolean canBe(Type other);
   
@@ -102,7 +150,17 @@ public sealed interface Type {
   }
   
   Type unify(Type other, ErrorLogger<Type> logger);
-  
+
+  Type.Array asArray();
+
+  default boolean canBeArray() {
+    return asArray() != null;
+  }
+
+  default Type unconditional() {
+    return this;
+  }
+
   @Override
   boolean equals(Object other);
   

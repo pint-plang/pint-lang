@@ -41,11 +41,10 @@ public class Main {
     System.out.println("-----------------------------------");
     {
       var logger = new ErrorLogger<>(Type.ERROR);
-      var typeEval = new TypeEvalVisitor(logger);
       var globals = new GlobalLookup();
       addPrints(globals, logger);
       var defs = new ASTConversionVisitor().visitFile(file);
-      new TypecheckVisitor(typeEval, globals).visitDefs(defs);
+      new TypecheckVisitor(logger, globals).visitDefs(defs);
       if (!logger.dumpErrors(System.err)) System.out.println("No type errors detected");
     }
     System.out.println();
