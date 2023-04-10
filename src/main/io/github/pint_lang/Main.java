@@ -109,6 +109,11 @@ public class Main {
           throw exit(-1);
         }
       });
+      global.defineFunction("exit", (exprEval, vargs) -> {
+        if (!(vargs.get(0) instanceof IntValue arg)) throw new BadExpressionException("Expected an int");
+        System.err.println("Exited with code " + arg.value());
+        throw exit(arg.value());
+      });
       var varNames = new HashSet<String>();
       var vars = new ArrayList<Definition.Variable>();
       var defVisitor = new DefEvalVisitor();
@@ -155,6 +160,7 @@ public class Main {
     globals.addFunction("readi", new GlobalLookup.FunctionType(Type.INT, List.of()), logger);
     globals.addFunction("asks", new GlobalLookup.FunctionType(Type.STRING, List.of(new GlobalLookup.Param("s", Type.STRING))), logger);
     globals.addFunction("aski", new GlobalLookup.FunctionType(Type.INT, List.of(new GlobalLookup.Param("s", Type.STRING))), logger);
+    globals.addFunction("exit", new GlobalLookup.FunctionType(Type.NEVER, List.of(new GlobalLookup.Param("code", Type.INT))), logger);
   }
   
   // A hack to allow control flow analysis to understand that this exits from a function

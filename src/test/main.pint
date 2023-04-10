@@ -4,6 +4,7 @@ let main() -> unit {
   printi(n);
   prints("! = ");
   printiln(factorial(n));
+  let x: int := exit(-1);
 }
 
 let x: int := 42;

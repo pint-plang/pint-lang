@@ -16,6 +16,7 @@ public class TypeEvalVisitor implements TypeASTVisitor<Void, TypeAST<Type>> {
       case "string" -> Type.STRING;
       case "int" -> Type.INT;
       case "bool" -> Type.BOOL;
+      case "never" -> Type.NEVER;
       default -> logger.error("No such type as '" + ast.name() + "'");
     });
   }
