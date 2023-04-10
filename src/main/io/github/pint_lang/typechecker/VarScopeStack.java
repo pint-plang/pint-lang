@@ -25,7 +25,13 @@ public class VarScopeStack {
   }
   
   public Type getVar(String name) {
-    return stack.peek().get(name);
+    var iter = stack.listIterator(stack.size());
+    while (iter.hasPrevious()) {
+      var scope = iter.previous();
+      var type = scope.get(name);
+      if (type != null) return type;
+    }
+    return null;
   }
   
 }

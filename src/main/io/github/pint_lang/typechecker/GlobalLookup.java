@@ -52,25 +52,25 @@ public class GlobalLookup {
   
   public class BuildVisitor implements DefASTVisitor<Void, Void> {
     
-    private final TypeEvalVisitor typeEval;
+    private final TypecheckVisitor typechecker;
     private final ErrorLogger<Type> logger;
     
-    public BuildVisitor(TypeEvalVisitor typeEval) {
-      this.typeEval = typeEval;
-      this.logger = typeEval.logger;
+    public BuildVisitor(TypecheckVisitor typechecker) {
+      this.typechecker = typechecker;
+      this.logger = typechecker.logger;
     }
     
     @Override
     public Void visitFuncDef(FuncDefAST<Void> ast) {
-      var params = ast.params().stream().map(param -> new Param(param.name(), param.type().accept(typeEval).data())).toList();
-      var returnType = ast.returnType().accept(typeEval).data();
+      var params = ast.params().stream().map(param -> new Param(param.name(), param.type().accept(typechecker).data())).toList();
+      var returnType = ast.returnType().accept(typechecker).data();
       addFunction(ast.name(), new FunctionType(returnType, params), logger);
       return null;
     }
     
     @Override
     public Void visitVarDef(VarDefAST<Void> ast) {
-      addVariable(ast.name(), ast.type().accept(typeEval).data(), logger);
+      addVariable(ast.name(), ast.type().accept(typechecker).data(), logger);
       return null;
     }
     

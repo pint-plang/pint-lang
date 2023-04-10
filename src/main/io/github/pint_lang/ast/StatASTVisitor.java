@@ -8,6 +8,6 @@ public interface StatASTVisitor<T, R> extends ExprASTVisitor<T, R> {
   
   R visitVarDef(VarDefAST<T> ast);
   
-  R acceptNopStat(NopStatAST<T> ast);
+  R visitNopStat(NopStatAST<T> ast);
   
 }

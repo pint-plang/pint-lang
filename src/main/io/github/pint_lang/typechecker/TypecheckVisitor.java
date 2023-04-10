@@ -3,22 +3,22 @@ package io.github.pint_lang.typechecker;
 import io.github.pint_lang.ast.*;
 
 import java.util.ArrayList;
+import java.util.Stack;
 
-public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisitor<Void, ExprAST<Type>> {
-  
-  public final TypeEvalVisitor typeEval;
+public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisitor<Void, ExprAST<Type>>, TypeASTVisitor<Void, TypeAST<Type>> {
+
   public final ErrorLogger<Type> logger;
   public final GlobalLookup globals;
   private final GlobalLookup.BuildVisitor globalsBuilder;
   private final JumpScopeStack jumpStack;
   private final VarScopeStack varStack;
+  private final Stack<Type> itStack = new Stack<>();
   private final StatVisitor statVisitor = new StatVisitor();
   
-  public TypecheckVisitor(TypeEvalVisitor typeEval, GlobalLookup globals) {
-    this.typeEval = typeEval;
-    this.logger = typeEval.logger;
+  public TypecheckVisitor(ErrorLogger<Type> logger, GlobalLookup globals) {
+    this.logger = logger;
     this.globals = globals;
-    this.globalsBuilder = globals.new BuildVisitor(typeEval);
+    this.globalsBuilder = globals.new BuildVisitor(this);
     this.jumpStack = new JumpScopeStack();
     this.varStack = new VarScopeStack();
   }
@@ -42,11 +42,41 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
   
   @Override
   public Void visitVarDef(VarDefAST<Void> ast) {
-    var type = ast.type().accept(typeEval).data();
+    var type = ast.type().accept(this).data();
     var value = ast.value().accept(this);
     if (!value.data().canBe(type)) logger.error("Tried to initialize a variable with the wrong type");
     ast.accept(globalsBuilder);
     return null;
+  }
+
+  @Override
+  public SimpleTypeAST<Type> visitSimpleType(SimpleTypeAST<Void> ast) {
+    return new SimpleTypeAST<>(ast.name(), switch (ast.name()) {
+      case "string" -> Type.STRING;
+      case "int" -> Type.INT;
+      case "bool" -> Type.BOOL;
+      default -> logger.error("No such type as '" + ast.name() + "'");
+    });
+  }
+
+  @Override
+  public UnitTypeAST<Type> visitUnitType(UnitTypeAST<Void> ast) {
+    return new UnitTypeAST<>(Type.UNIT);
+  }
+
+  @Override
+  public ArrayTypeAST<Type> visitArrayType(ArrayTypeAST<Void> ast) {
+    var innerType = ast.innerType().accept(this);
+    return new ArrayTypeAST<>(innerType, new Type.Array(innerType.data()));
+  }
+
+  @Override
+  public ConditionTypeAST<Type> visitConditionType(ConditionTypeAST<Void> ast) {
+    var type = ast.type().accept(this);
+    itStack.push(type.data());
+    var condition = ast.condition().accept(this);
+    itStack.pop();
+    return new ConditionTypeAST<>(type, condition, new Type.Condition(type.data(), condition));
   }
   
   @Override
@@ -56,9 +86,9 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
     var data = operand.data();
     if (data == Type.ERROR) return new UnaryExprAST<>(op, operand, Type.ERROR);
     return new UnaryExprAST<>(op, operand, switch (op) {
-      case PLUS, NEG -> data == Type.INT ? Type.INT : logger.error("Unary arithmetic operators only apply to integers");
-      case NOT -> data == Type.BOOL ? Type.BOOL : logger.error("The unary not operator only applies to booleans");
-      case ABS -> data == Type.INT || data == Type.STRING || data instanceof Type.Array ? Type.INT : logger.error("The unary magnitude operator only applies to integers, strings, or arrays");
+      case PLUS, NEG -> data.canBe(Type.INT) ? Type.INT : logger.error("Unary arithmetic operators only apply to integers");
+      case NOT -> data.canBe(Type.BOOL) ? Type.BOOL : logger.error("The unary not operator only applies to booleans");
+      case ABS -> data.canBe(Type.INT) || data.canBe(Type.STRING) || data.canBeArray() ? Type.INT : logger.error("The unary magnitude operator only applies to integers, strings, or arrays");
     });
   }
   
@@ -72,11 +102,11 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
     if (leftData == Type.ERROR || rightData == Type.ERROR) return new BinaryExprAST<>(op, left, right, Type.ERROR);
     return new BinaryExprAST<>(op, left, right, switch (op) {
         case ASSIGN -> rightData.canBe(leftData) ? left instanceof VarExprAST<Type> || left instanceof IndexExprAST<Type> ? Type.UNIT : logger.error("Only variables or elements of an array can be assigned to") : logger.error("The simple binary assignment operator only applies to similar types");
-        case ADD_ASSIGN, SUB_ASSIGN, MUL_ASSIGN, DIV_ASSIGN -> leftData == Type.INT && rightData == Type.INT ? left instanceof VarExprAST<Type> || left instanceof IndexExprAST<Type> ? Type.UNIT : logger.error("Only variables or elements of an array can be assigned to") : logger.error("Compound binary assignment operators only apply to integers");
-        case OR, AND -> leftData == Type.BOOL && rightData == Type.BOOL ? Type.BOOL : logger.error("Binary logical operators only apply to booleans");
+        case ADD_ASSIGN, SUB_ASSIGN, MUL_ASSIGN, DIV_ASSIGN -> leftData.canBe(Type.INT) && rightData.canBe(Type.INT) ? left instanceof VarExprAST<Type> || left instanceof IndexExprAST<Type> ? Type.UNIT : logger.error("Only variables or elements of an array can be assigned to") : logger.error("Compound binary assignment operators only apply to integers");
+        case OR, AND -> leftData.canBe(Type.BOOL) && rightData.canBe(Type.BOOL) ? Type.BOOL : logger.error("Binary logical operators only apply to booleans");
         case EQ, NEQ -> leftData.eitherCanBe(rightData) ? Type.BOOL : logger.error("Binary equality operators only apply to similar types");
-        case LT, NLT, LE, NLE, GT, NGT, GE, NGE -> leftData == Type.INT && rightData == Type.INT || leftData == Type.STRING && rightData == Type.STRING ? Type.BOOL : logger.error("Binary comparison operators only apply to integers or strings");
-        case ADD, SUB, MUL, DIV -> leftData == Type.INT && rightData == Type.INT ? Type.INT : logger.error("Binary arithmetic operators only apply to integers");
+        case LT, NLT, LE, NLE, GT, NGT, GE, NGE -> leftData.canBe(Type.INT) && rightData.canBe(Type.INT) || leftData.canBe(Type.STRING) && rightData.canBe(Type.STRING) ? Type.BOOL : logger.error("Binary comparison operators only apply to integers or strings");
+        case ADD, SUB, MUL, DIV -> leftData.canBe(Type.INT) && rightData.canBe(Type.INT) ? Type.INT : logger.error("Binary arithmetic operators only apply to integers");
     });
   }
   
@@ -115,7 +145,10 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
   public VarExprAST<Type> visitVarExprAST(VarExprAST<Void> ast) {
     var name = ast.name();
     var local = varStack.getVar(name);
-    if (local != null) return new VarExprAST<>(name, local);
+    if (local != null) {
+      if (!itStack.isEmpty()) local = local.unconditional();
+      return new VarExprAST<>(name, local);
+    }
     var params = globals.getThisFunctionType().params();
     for (var param : params) if (param.name().equals(name)) return new VarExprAST<>(name, param.type());
     var global = globals.getVariableType(name);
@@ -146,20 +179,55 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
     var indexee = ast.indexee().accept(this);
     var index = ast.index().accept(this);
     if (indexee.data() == Type.ERROR || index.data() == Type.ERROR) return new IndexExprAST<>(indexee, index, Type.ERROR);
-    if (!(indexee.data() instanceof Type.Array indexeeArray)) return new IndexExprAST<>(indexee, index, logger.error("Only arrays can be indexed"));
-    if (index.data() != Type.INT) return new IndexExprAST<>(indexee, index, logger.error("Only integers can be used as indices"));
+    var indexeeArray = indexee.data().asArray();
+    if (indexeeArray == null) return new IndexExprAST<>(indexee, index, logger.error("Only arrays can be indexed"));
+    if (index.data().canBe(arrayIndexCondition(indexee))) return new IndexExprAST<>(indexee, index, logger.error("Only int when it >= 0 and it < |<arr>| can be used as indices for array <arr>"));
     return new IndexExprAST<>(indexee, index, indexeeArray.elementType());
+  }
+
+  private Type.Condition arrayIndexCondition(ExprAST<Type> indexee) {
+    return new Type.Condition(
+      Type.INT,
+      new BinaryExprAST<>(
+        BinaryOp.AND,
+        new BinaryExprAST<>(
+          BinaryOp.GE,
+          new ItExprAST<>(Type.INT),
+          new IntLiteralExprAST<>(0, Type.INT),
+          Type.BOOL
+        ),
+        new BinaryExprAST<>(
+          BinaryOp.LT,
+          new ItExprAST<>(Type.INT),
+          new UnaryExprAST<>(
+            UnaryOp.ABS,
+            indexee,
+            Type.INT
+          ),
+          Type.BOOL
+        ),
+        Type.BOOL
+      )
+    );
   }
   
   @Override
   public ItExprAST<Type> visitItExpr(ItExprAST<Void> ast) {
-    return new ItExprAST<>(logger.error("Type conditions are not supported yet"));
+    if (itStack.isEmpty()) return new ItExprAST<>(logger.error("It must only be in a type condition"));
+    return new ItExprAST<>(itStack.peek().unconditional());
   }
   
   @Override
   public IfExprAST<Type> visitIfExpr(IfExprAST<Void> ast) {
     var condition = ast.condition().accept(this);
+    var vars = condition.accept(new VariableFindVisitor());
+    varStack.push();
+    for (var var : vars) {
+      var typeCondition = condition.accept(new ConditionMapVisitor(var.name()));
+      varStack.putVar(var.name(), new Type.Condition(var.data(), typeCondition));
+    }
     var thenBody = ast.thenBody().accept(this);
+    varStack.pop();
     var elseBody = ast.elseBody().accept(this);
     if (condition.data() == Type.ERROR || thenBody.data() == Type.ERROR || elseBody.data() == Type.ERROR) return new IfExprAST<>(condition, thenBody, elseBody, Type.ERROR);
     if (condition.data() != Type.BOOL) return new IfExprAST<>(condition, thenBody, elseBody, logger.error("If conditions must be booleans"));
@@ -267,7 +335,7 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
     @Override
     public VarDefAST<Type> visitVarDef(VarDefAST<Void> ast) {
       Type type = Type.UNIT;
-      var varType = ast.type().accept(typeEval);
+      var varType = ast.type().accept(TypecheckVisitor.this);
       var value = ast.value().accept(TypecheckVisitor.this);
       if (!value.data().canBe(varType.data())) type = logger.error("Tried to initialize a variable with the wrong type");
       varStack.putVar(ast.name(), varType.data());
@@ -275,7 +343,7 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
     }
     
     @Override
-    public NopStatAST<Type> acceptNopStat(NopStatAST<Void> ast) {
+    public NopStatAST<Type> visitNopStat(NopStatAST<Void> ast) {
       return new NopStatAST<>(Type.UNIT);
     }
     

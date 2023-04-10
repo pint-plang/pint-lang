@@ -45,11 +45,10 @@ public class Main {
     boolean errors;
     {
       var logger = new ErrorLogger<>(Type.ERROR);
-      var typeEval = new TypeEvalVisitor(logger);
       var globals = new GlobalLookup();
       addFunctions(globals, logger);
       var defs = new ASTConversionVisitor().visitFile(file);
-      new TypecheckVisitor(typeEval, globals).visitDefs(defs);
+      new TypecheckVisitor(logger, globals).visitDefs(defs);
       errors = logger.dumpErrors(System.err);
       if (!errors) System.out.println("No type errors detected");
     }
