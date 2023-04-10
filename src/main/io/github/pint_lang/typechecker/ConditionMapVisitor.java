@@ -45,7 +45,12 @@ public class ConditionMapVisitor implements ExprASTVisitor<Type, ExprAST<Type>> 
     public ExprAST<Type> visitIndexExpr(IndexExprAST<Type> ast) {
         return new IndexExprAST<>(ast.indexee().accept(this), ast.index().accept(this), ast.data());
     }
-
+    
+    @Override
+    public ExprAST<Type> visitSliceExpr(SliceExprAST<Type> ast) {
+        return new SliceExprAST<>(ast.slicee().accept(this), ast.from().accept(this), ast.to().accept(this), ast.data());
+    }
+    
     @Override
     public ExprAST<Type> visitItExpr(ItExprAST<Type> ast) {
         System.err.println("warning: ConditionMapVisitor.visitItExpr was called; please investigate");
@@ -74,7 +79,7 @@ public class ConditionMapVisitor implements ExprASTVisitor<Type, ExprAST<Type>> 
 
     @Override
     public ExprAST<Type> visitArrayLiteralExpr(ArrayLiteralExprAST<Type> ast) {
-        return new ArrayLiteralExprAST<>(ast.elements().stream().map(this::visitExpr).toList(), ast.data());
+        return new ArrayLiteralExprAST<>(ast.items().stream().map(item -> new ArrayLiteralExprAST.Item<>(item.item().accept(this), item.spread())).toList(), ast.data());
     }
 
     @Override

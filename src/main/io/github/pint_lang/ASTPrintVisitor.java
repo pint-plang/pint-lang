@@ -141,6 +141,18 @@ public class ASTPrintVisitor implements ASTVisitor<Void, Void> {
   }
   
   @Override
+  public Void visitSliceExpr(SliceExprAST<Void> ast) {
+    ast.slicee().accept(this);
+    out.print("[");
+    if (ast.from() != null) ast.from().accept(this);
+    out.print("...");
+    if (ast.to() != null) ast.to().accept(this);
+    out.print("]");
+    return null;
+  }
+  
+  
+  @Override
   public Void visitItExpr(ItExprAST<Void> ast) {
     out.print("it");
     return null;
@@ -204,8 +216,9 @@ public class ASTPrintVisitor implements ASTVisitor<Void, Void> {
   @Override
   public Void visitArrayLiteralExpr(ArrayLiteralExprAST<Void> ast) {
     out.print("[");
-    for (var element : ast.elements()) {
-      element.accept(this);
+    for (var item : ast.items()) {
+      if (item.spread()) out.print("...");
+      item.item().accept(this);
       out.print(", ");
     }
     out.print("]");

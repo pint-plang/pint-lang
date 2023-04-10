@@ -18,6 +18,8 @@ public interface ExprASTVisitor<T, R> {
   
   R visitIndexExpr(IndexExprAST<T> ast);
   
+  R visitSliceExpr(SliceExprAST<T> ast);
+  
   R visitItExpr(ItExprAST<T> ast);
   
   R visitIfExpr(IfExprAST<T> ast);

@@ -42,8 +42,11 @@ loopExpr : label? 'loop' body=expr ;
 whileExpr : label? 'while' cond=expr 'loop' body=expr ;
 jumpExpr : jump=('return' | 'break' | 'continue') atLabel? expr? ;
 atLabel : '@' ID ;
-indexOp : '[' expr ']' ;
-arrayLiteral : '[' (expr ',')* expr? ']' ;
+indexOp : '[' expr ']'              #indexIndexOp
+        | '[' from=expr? '...' to=expr? ']' #sliceIndexOp
+        ;
+arrayLiteral : '[' (arrayLiteralItem ',')* arrayLiteralItem? ']' ;
+arrayLiteralItem : spread='...'? expr ;
 literal : string=STRING_LITERAL | int=INT_LITERAL | bool=('true' | 'false') | unit='unit' ;
 
 ID : [A-Za-z_][A-Za-z0-9_]* ;

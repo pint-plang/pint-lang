@@ -44,6 +44,11 @@ public abstract class ExprDelegateStatASTVisitor<T, R> implements StatASTVisitor
   }
   
   @Override
+  public R visitSliceExpr(SliceExprAST<T> ast) {
+    return expr.visitSliceExpr(ast);
+  }
+  
+  @Override
   public R visitItExpr(ItExprAST<T> ast) {
     return expr.visitItExpr(ast);
   }

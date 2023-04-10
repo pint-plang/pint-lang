@@ -46,7 +46,7 @@ public class Main {
     {
       var logger = new ErrorLogger<>(Type.ERROR);
       var globals = new GlobalLookup();
-      addFunctions(globals, logger);
+      declareFunctions(globals, logger);
       var defs = new ASTConversionVisitor().visitFile(file);
       new TypecheckVisitor(logger, globals).visitDefs(defs);
       errors = logger.dumpErrors(System.err);
@@ -55,64 +55,7 @@ public class Main {
     System.out.println();
     if (!errors) {
       var global = new GlobalScope();
-      global.defineFunction("prints", (exprEval, vargs) -> {
-        if (!(vargs.get(0) instanceof StringValue arg)) throw new BadExpressionException("Expected a string");
-        System.out.print(arg.value());
-        return Value.UNIT;
-      });
-      global.defineFunction("printi", (exprEval, vargs) -> {
-        System.out.print(vargs.get(0).valueToString());
-        return Value.UNIT;
-      });
-      global.defineFunction("printsln", (exprEval, vargs) -> {
-        if (!(vargs.get(0) instanceof StringValue arg)) throw new BadExpressionException("Expected a string");
-        System.out.println(arg.value());
-        return Value.UNIT;
-      });
-      global.defineFunction("printiln", (exprEval, vargs) -> {
-        System.out.println(vargs.get(0).valueToString());
-        return Value.UNIT;
-      });
-      global.defineFunction("println", (exprEval, vargs) -> {
-        System.out.println();
-        return Value.UNIT;
-      });
-      var in = new Scanner(System.in);
-      global.defineFunction("reads", (exprEval, vargs) -> {
-        var line = in.nextLine();
-        return Value.of(line);
-      });
-      global.defineFunction("readi", (exprEval, vargs) -> {
-        try {
-          var i = parseInt(in.nextLine());
-          return Value.of(i);
-        } catch (NumberFormatException e) {
-          System.err.println("IO error: expected an int");
-          throw exit(-1);
-        }
-      });
-      global.defineFunction("asks", (exprEval, vargs) -> {
-        if (!(vargs.get(0) instanceof StringValue arg)) throw new BadExpressionException("Expected a string");
-        System.out.print(arg.value());
-        var line = in.nextLine();
-        return Value.of(line);
-      });
-      global.defineFunction("aski", (exprEval, vargs) -> {
-        if (!(vargs.get(0) instanceof StringValue arg)) throw new BadExpressionException("Expected a string");
-        System.out.print(arg.value());
-        try {
-          var i = parseInt(in.nextLine());
-          return Value.of(i);
-        } catch (NumberFormatException e) {
-          System.err.println("IO error: expected an int");
-          throw exit(-1);
-        }
-      });
-      global.defineFunction("exit", (exprEval, vargs) -> {
-        if (!(vargs.get(0) instanceof IntValue arg)) throw new BadExpressionException("Expected an int");
-        System.err.println("Exited with code " + arg.value());
-        throw exit(arg.value());
-      });
+      defineFunctions(global);
       var varNames = new HashSet<String>();
       var vars = new ArrayList<Definition.Variable>();
       var defVisitor = new DefEvalVisitor();
@@ -149,7 +92,7 @@ public class Main {
     }
   }
   
-  private static void addFunctions(GlobalLookup globals, ErrorLogger<?> logger) {
+  private static void declareFunctions(GlobalLookup globals, ErrorLogger<?> logger) {
     globals.addFunction("prints", new GlobalLookup.FunctionType(Type.UNIT, List.of(new GlobalLookup.Param("s", Type.STRING))), logger);
     globals.addFunction("printi", new GlobalLookup.FunctionType(Type.UNIT, List.of(new GlobalLookup.Param("i", Type.INT))), logger);
     globals.addFunction("printsln", new GlobalLookup.FunctionType(Type.UNIT, List.of(new GlobalLookup.Param("s", Type.STRING))), logger);
@@ -160,6 +103,67 @@ public class Main {
     globals.addFunction("asks", new GlobalLookup.FunctionType(Type.STRING, List.of(new GlobalLookup.Param("s", Type.STRING))), logger);
     globals.addFunction("aski", new GlobalLookup.FunctionType(Type.INT, List.of(new GlobalLookup.Param("s", Type.STRING))), logger);
     globals.addFunction("exit", new GlobalLookup.FunctionType(Type.NEVER, List.of(new GlobalLookup.Param("code", Type.INT))), logger);
+  }
+  
+  private static void defineFunctions(GlobalScope global) {
+    global.defineFunction("prints", (exprEval, vargs) -> {
+      if (!(vargs.get(0) instanceof StringValue arg)) throw new BadExpressionException("Expected a string");
+      System.out.print(arg.value());
+      return Value.UNIT;
+    });
+    global.defineFunction("printi", (exprEval, vargs) -> {
+      System.out.print(vargs.get(0).valueToString());
+      return Value.UNIT;
+    });
+    global.defineFunction("printsln", (exprEval, vargs) -> {
+      if (!(vargs.get(0) instanceof StringValue arg)) throw new BadExpressionException("Expected a string");
+      System.out.println(arg.value());
+      return Value.UNIT;
+    });
+    global.defineFunction("printiln", (exprEval, vargs) -> {
+      System.out.println(vargs.get(0).valueToString());
+      return Value.UNIT;
+    });
+    global.defineFunction("println", (exprEval, vargs) -> {
+      System.out.println();
+      return Value.UNIT;
+    });
+    var in = new Scanner(System.in);
+    global.defineFunction("reads", (exprEval, vargs) -> {
+      var line = in.nextLine();
+      return Value.of(line);
+    });
+    global.defineFunction("readi", (exprEval, vargs) -> {
+      try {
+        var i = parseInt(in.nextLine());
+        return Value.of(i);
+      } catch (NumberFormatException e) {
+        System.err.println("IO error: expected an int");
+        throw exit(-1);
+      }
+    });
+    global.defineFunction("asks", (exprEval, vargs) -> {
+      if (!(vargs.get(0) instanceof StringValue arg)) throw new BadExpressionException("Expected a string");
+      System.out.print(arg.value());
+      var line = in.nextLine();
+      return Value.of(line);
+    });
+    global.defineFunction("aski", (exprEval, vargs) -> {
+      if (!(vargs.get(0) instanceof StringValue arg)) throw new BadExpressionException("Expected a string");
+      System.out.print(arg.value());
+      try {
+        var i = parseInt(in.nextLine());
+        return Value.of(i);
+      } catch (NumberFormatException e) {
+        System.err.println("IO error: expected an int");
+        throw exit(-1);
+      }
+    });
+    global.defineFunction("exit", (exprEval, vargs) -> {
+      if (!(vargs.get(0) instanceof IntValue arg)) throw new BadExpressionException("Expected an int");
+      System.err.println("Exited with code " + arg.value());
+      throw exit(arg.value());
+    });
   }
   
   // A hack to allow control flow analysis to understand that this exits from a function

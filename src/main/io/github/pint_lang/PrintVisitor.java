@@ -373,7 +373,7 @@ public class PrintVisitor extends PintBaseVisitor<Void> {
   }
   
   @Override
-  public Void visitIndexOp(IndexOpContext ctx) {
+  public Void visitIndexIndexOp(IndexIndexOpContext ctx) {
     out.print("[");
     ctx.expr().accept(this);
     out.print("]");
@@ -381,13 +381,30 @@ public class PrintVisitor extends PintBaseVisitor<Void> {
   }
   
   @Override
+  public Void visitSliceIndexOp(SliceIndexOpContext ctx) {
+    out.print("[");
+    if (ctx.from != null) ctx.from.accept(this);
+    out.print("...");
+    if (ctx.to != null) ctx.to.accept(this);
+    out.print("]");
+    return null;
+  }
+  
+  @Override
   public Void visitArrayLiteral(ArrayLiteralContext ctx) {
     out.print("[");
-    for (var expr : ctx.expr()) {
-      expr.accept(this);
+    for (var arrayLiteralItem : ctx.arrayLiteralItem()) {
+      arrayLiteralItem.accept(this);
       out.print(", ");
     }
     out.print("]");
+    return null;
+  }
+  
+  @Override
+  public Void visitArrayLiteralItem(ArrayLiteralItemContext ctx) {
+    if (ctx.spread != null) out.print("...");
+    ctx.expr().accept(this);
     return null;
   }
   

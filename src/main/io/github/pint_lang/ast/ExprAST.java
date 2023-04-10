@@ -1,6 +1,6 @@
 package io.github.pint_lang.ast;
 
-public sealed interface ExprAST<T> extends StatAST<T> permits ArrayLiteralExprAST, BinaryExprAST, BlockExprAST, BoolLiteralExprAST, FuncCallExprAST, IfExprAST, IndexExprAST, IntLiteralExprAST, ItExprAST, JumpExprAST, LoopExprAST, StringLiteralExprAST, UnaryExprAST, UnitLiteralExprAST, VarExprAST, WhileExprAST {
+public sealed interface ExprAST<T> extends StatAST<T> permits ArrayLiteralExprAST, BinaryExprAST, BlockExprAST, BoolLiteralExprAST, FuncCallExprAST, IfExprAST, IndexExprAST, SliceExprAST, IntLiteralExprAST, ItExprAST, JumpExprAST, LoopExprAST, StringLiteralExprAST, UnaryExprAST, UnitLiteralExprAST, VarExprAST, WhileExprAST {
   
   @Override
   default <R> R accept(ASTVisitor<T, R> visitor) {

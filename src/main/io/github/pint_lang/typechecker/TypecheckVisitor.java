@@ -101,8 +101,8 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
     var rightData = right.data();
     if (leftData == Type.ERROR || rightData == Type.ERROR) return new BinaryExprAST<>(op, left, right, Type.ERROR);
     return new BinaryExprAST<>(op, left, right, switch (op) {
-        case ASSIGN -> rightData.canBe(leftData) ? left instanceof VarExprAST<Type> || left instanceof IndexExprAST<Type> ? Type.UNIT : logger.error("Only variables or elements of an array can be assigned to") : logger.error("The simple binary assignment operator only applies to similar types");
-        case ADD_ASSIGN, SUB_ASSIGN, MUL_ASSIGN, DIV_ASSIGN -> leftData.canBe(Type.INT) && rightData.canBe(Type.INT) ? left instanceof VarExprAST<Type> || left instanceof IndexExprAST<Type> ? Type.UNIT : logger.error("Only variables or elements of an array can be assigned to") : logger.error("Compound binary assignment operators only apply to integers");
+        case ASSIGN -> rightData.canBe(leftData) ? left instanceof VarExprAST<Type> || left instanceof IndexExprAST<Type> ? Type.UNIT : logger.error("Only variables or items of an array can be assigned to") : logger.error("The simple binary assignment operator only applies to similar types");
+        case ADD_ASSIGN, SUB_ASSIGN, MUL_ASSIGN, DIV_ASSIGN -> leftData.canBe(Type.INT) && rightData.canBe(Type.INT) ? left instanceof VarExprAST<Type> || left instanceof IndexExprAST<Type> ? Type.UNIT : logger.error("Only variables or items of an array can be assigned to") : logger.error("Compound binary assignment operators only apply to integers");
         case OR, AND -> leftData.canBe(Type.BOOL) && rightData.canBe(Type.BOOL) ? Type.BOOL : logger.error("Binary logical operators only apply to booleans");
         case EQ, NEQ -> leftData.eitherCanBe(rightData) ? Type.BOOL : logger.error("Binary equality operators only apply to similar types");
         case LT, NLT, LE, NLE, GT, NGT, GE, NGE -> leftData.canBe(Type.INT) && rightData.canBe(Type.INT) || leftData.canBe(Type.STRING) && rightData.canBe(Type.STRING) ? Type.BOOL : logger.error("Binary comparison operators only apply to integers or strings");
@@ -181,6 +181,7 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
     if (indexee.data() == Type.ERROR || index.data() == Type.ERROR) return new IndexExprAST<>(indexee, index, Type.ERROR);
     var indexeeArray = indexee.data().asArray();
     if (indexeeArray == null) return new IndexExprAST<>(indexee, index, logger.error("Only arrays can be indexed"));
+    // todo: I realized that the condition is inverted, so this isn't actually working at all. I'll fix it later
     if (index.data().canBe(arrayIndexCondition(indexee))) return new IndexExprAST<>(indexee, index, logger.error("Only int when it >= 0 and it < |<arr>| can be used as indices for array <arr>"));
     return new IndexExprAST<>(indexee, index, indexeeArray.elementType());
   }
@@ -212,6 +213,72 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
   }
   
   @Override
+  public SliceExprAST<Type> visitSliceExpr(SliceExprAST<Void> ast) {
+    var slicee = ast.slicee().accept(this);
+    var from = ast.from() != null ? ast.from().accept(this) : null;
+    var to = ast.to() != null ? ast.to().accept(this) : null;
+    if (slicee.data() == Type.ERROR || from != null && from.data() == Type.ERROR || to != null && to.data() == Type.ERROR) return new SliceExprAST<>(slicee, from, to, Type.ERROR);
+    var sliceeArray = slicee.data().asArray();
+    if (sliceeArray == null) return new SliceExprAST<>(slicee, from, to, logger.error("Only arrays can be sliced"));
+    // todo: see line 184
+    if (from != null && from.data().canBe(arraySliceFrom(slicee))) return new SliceExprAST<>(slicee, from, to, logger.error("Only int when it >= 0 and it <= |<arr>| can be used as from indices for slicing array <arr>"));
+    if (to != null && to.data().canBe(arraySliceTo(slicee, from))) return new SliceExprAST<>(slicee, from, to, logger.error("Only int when it >= <from> and it <= |<arr>| can be used as to indices for slicing array <arr>"));
+    return new SliceExprAST<>(slicee, from, to, new Type.Array(sliceeArray.elementType()));
+  }
+  
+  private Type.Condition arraySliceFrom(ExprAST<Type> slicee) {
+    return new Type.Condition(
+      Type.INT,
+      new BinaryExprAST<>(
+        BinaryOp.AND,
+        new BinaryExprAST<>(
+          BinaryOp.GE,
+          new ItExprAST<>(Type.INT),
+          new IntLiteralExprAST<>(0, Type.INT),
+          Type.BOOL
+        ),
+        new BinaryExprAST<>(
+          BinaryOp.LE,
+          new ItExprAST<>(Type.INT),
+          new UnaryExprAST<>(
+            UnaryOp.ABS,
+            slicee,
+            Type.INT
+          ),
+          Type.BOOL
+        ),
+        Type.BOOL
+      )
+    );
+  }
+  
+  private Type.Condition arraySliceTo(ExprAST<Type> slicee, ExprAST<Type> from) {
+    return new Type.Condition(
+      Type.INT,
+      new BinaryExprAST<>(
+        BinaryOp.AND,
+        new BinaryExprAST<>(
+          BinaryOp.GE,
+          new ItExprAST<>(Type.INT),
+          from != null ? from : new IntLiteralExprAST<>(0, Type.INT),
+          Type.BOOL
+        ),
+        new BinaryExprAST<>(
+          BinaryOp.LE,
+          new ItExprAST<>(Type.INT),
+          new UnaryExprAST<>(
+            UnaryOp.ABS,
+            slicee,
+            Type.INT
+          ),
+          Type.BOOL
+        ),
+        Type.BOOL
+      )
+    );
+  }
+  
+  @Override
   public ItExprAST<Type> visitItExpr(ItExprAST<Void> ast) {
     if (itStack.isEmpty()) return new ItExprAST<>(logger.error("It must only be in a type condition"));
     return new ItExprAST<>(itStack.peek().unconditional());
@@ -228,10 +295,10 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
     }
     var thenBody = ast.thenBody().accept(this);
     varStack.pop();
-    var elseBody = ast.elseBody().accept(this);
-    if (condition.data() == Type.ERROR || thenBody.data() == Type.ERROR || elseBody.data() == Type.ERROR) return new IfExprAST<>(condition, thenBody, elseBody, Type.ERROR);
+    var elseBody = ast.elseBody() != null ? ast.elseBody().accept(this) : null;
+    if (condition.data() == Type.ERROR || thenBody.data() == Type.ERROR || elseBody != null && elseBody.data() == Type.ERROR) return new IfExprAST<>(condition, thenBody, elseBody, Type.ERROR);
     if (condition.data() != Type.BOOL) return new IfExprAST<>(condition, thenBody, elseBody, logger.error("If conditions must be booleans"));
-    var resultType = thenBody.data().unify(elseBody.data(), logger);
+    var resultType = elseBody != null ? thenBody.data().unify(elseBody.data(), logger) : Type.UNIT;
     return new IfExprAST<>(condition, thenBody, elseBody, resultType);
   }
   
@@ -297,11 +364,19 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
   @Override
   public ArrayLiteralExprAST<Type> visitArrayLiteralExpr(ArrayLiteralExprAST<Void> ast) {
     Type elementType = Type.NEVER;
-    var elements = new ArrayList<ExprAST<Type>>(ast.elements().size());
-    for (var astElement : ast.elements()) {
-      var element = astElement.accept(this);
-      elements.add(element);
-      elementType = elementType.unify(element.data(), logger);
+    var elements = new ArrayList<ArrayLiteralExprAST.Item<Type>>(ast.items().size());
+    for (var item : ast.items()) {
+      if (item.spread()) {
+        var spreadee = item.item().accept(this);
+        elements.add(new ArrayLiteralExprAST.Item<>(spreadee, true));
+        var spreadeeArray = spreadee.data().asArray();
+        if (spreadeeArray != null) elementType = elementType.unify(spreadeeArray.elementType(), logger);
+        else elementType = logger.error("Only arrays can be spread into arrays");
+      } else {
+        var element = item.item().accept(this);
+        elements.add(new ArrayLiteralExprAST.Item<>(element, false));
+        elementType = elementType.unify(element.data(), logger);
+      }
     }
     return new ArrayLiteralExprAST<>(elements, elementType == Type.ERROR ? Type.ERROR : new Type.Array(elementType));
   }

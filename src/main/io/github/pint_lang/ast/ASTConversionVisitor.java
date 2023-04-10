@@ -176,8 +176,14 @@ public class ASTConversionVisitor extends PintBaseVisitor<AST<Void>> {
   }
   
   @Override
-  public IndexExprAST<Void> visitIndexFactor(IndexFactorContext ctx) {
-    return new IndexExprAST<>(visitFactor(ctx.factor()), visitIndexOp(ctx.indexOp()), null);
+  public ExprAST<Void> visitIndexFactor(IndexFactorContext ctx) {
+    if (ctx.indexOp() instanceof IndexIndexOpContext indexIndexOp) {
+      return new IndexExprAST<>(visitFactor(ctx.factor()), visitExpr(indexIndexOp.expr()), null);
+    } else if (ctx.indexOp() instanceof SliceIndexOpContext sliceIndexOp) {
+      return new SliceExprAST<>(visitFactor(ctx.factor()), sliceIndexOp.from != null ? visitExpr(sliceIndexOp.from) : null, sliceIndexOp.to != null ? visitExpr(sliceIndexOp.to) : null, null);
+    } else {
+      throw new IllegalStateException("Invalid index operation");
+    }
   }
   
   @Override
@@ -266,13 +272,8 @@ public class ASTConversionVisitor extends PintBaseVisitor<AST<Void>> {
   }
   
   @Override
-  public ExprAST<Void> visitIndexOp(IndexOpContext ctx) {
-    return visitExpr(ctx.expr());
-  }
-  
-  @Override
   public ArrayLiteralExprAST<Void> visitArrayLiteral(ArrayLiteralContext ctx) {
-    return new ArrayLiteralExprAST<>(ctx.expr().stream().map(this::visitExpr).toList(), null);
+    return new ArrayLiteralExprAST<>(ctx.arrayLiteralItem().stream().map(item -> new ArrayLiteralExprAST.Item<>(visitExpr(item.expr()), item.spread != null)).toList(), null);
   }
   
   @Override

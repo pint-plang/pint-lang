@@ -1,10 +1,35 @@
 let main() -> unit {
   printsln("Hello World!");
-  let n: int := aski("Please enter a number: ");
+  /*let n: int := aski("Please enter a number: ");
   printi(n);
   prints("! = ");
-  printiln(factorial(n));
-  let x: int := exit(-1);
+  printiln(factorial(n));*/
+  let arr: int[] := [3, 2, 1, 42];
+  printis(arr);
+  {
+    let i: int := 2;
+    let j: int := i + 1;
+    if i > 0 and i <= |arr| then {
+      if j > 0 and j <= |arr| then {
+        //printis([...arr[...i], 7, ...arr[j...]]);
+      }
+    };
+  }
+}
+
+let printis(is: int[]) -> unit {
+  let i: int := 0;
+  prints("[");
+  while i < |is| loop {
+    if i >= 0 and i < |is| then {
+      printi(is[i]);
+      prints(", ");
+    } else {
+      prints("wut");
+    };
+    i := i + 1;
+  };
+  printsln("]");
 }
 
 let x: int := 42;

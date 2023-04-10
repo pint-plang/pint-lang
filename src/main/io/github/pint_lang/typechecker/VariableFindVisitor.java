@@ -62,6 +62,14 @@ public class VariableFindVisitor implements StatASTVisitor<Type, Set<VarExprAST<
         ast.index().accept(this);
         return vars;
     }
+    
+    @Override
+    public Set<VarExprAST<Type>> visitSliceExpr(SliceExprAST<Type> ast) {
+        ast.slicee().accept(this);
+        ast.from().accept(this);
+        ast.to().accept(this);
+        return vars;
+    }
 
     @Override
     public Set<VarExprAST<Type>> visitItExpr(ItExprAST<Type> ast) {
@@ -98,7 +106,7 @@ public class VariableFindVisitor implements StatASTVisitor<Type, Set<VarExprAST<
 
     @Override
     public Set<VarExprAST<Type>> visitArrayLiteralExpr(ArrayLiteralExprAST<Type> ast) {
-        for (var element : ast.elements()) element.accept(this);
+        for (var element : ast.items()) element.item().accept(this);
         return vars;
     }
 

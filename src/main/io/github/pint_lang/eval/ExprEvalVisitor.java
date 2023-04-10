@@ -5,6 +5,7 @@ import io.github.pint_lang.gen.PintParser.*;
 import io.github.pint_lang.eval.ExprEvalControlFlow.*;
 
 import java.util.ArrayList;
+import java.util.List;
 
 import static java.lang.Integer.parseInt;
 
@@ -54,31 +55,10 @@ public class ExprEvalVisitor extends PintBaseVisitor<ExprEvalControlFlow> {
             default -> throw new IllegalStateException("Invalid assignment operator");
           }
         }
-      } else if (factor instanceof IndexFactorContext indexFactor) {
-        var leftArrFlow = indexFactor.factor().accept(this);
-        if (!(leftArrFlow instanceof Finish leftArrFinish)) return leftArrFlow;
-        if (!(leftArrFinish.value() instanceof ArrayValue leftArr)) throw new BadTypeException("Only arrays can be indexed");
-        var leftIndexFlow = indexFactor.indexOp().accept(this);
-        if (!(leftIndexFlow instanceof Finish leftIndexFinish)) return leftIndexFlow;
-        if (!(leftIndexFinish.value() instanceof IntValue leftIndex)) throw new BadTypeException("Array indices must be ints");
-        var rightFlow = ctx.right.accept(this);
-        if (!(rightFlow instanceof Finish rightFinish)) return rightFlow;
-        var op = ctx.op.getText();
-        if (":=".equals(op)) {
-          leftArr.values()[leftIndex.value()] = rightFinish.value();
-        } else {
-          if (!(leftArr.values()[leftIndex.value()] instanceof IntValue leftInt) || !(rightFinish.value() instanceof IntValue rightInt)) throw new BadTypeException("Arithmetic assignment operators");
-          switch (op) {
-            case ":+=" -> leftArr.values()[leftIndex.value()] = Value.of(leftInt.value() + rightInt.value());
-            case ":-=" -> leftArr.values()[leftIndex.value()] = Value.of(leftInt.value() - rightInt.value());
-            case ":*=" -> leftArr.values()[leftIndex.value()] = Value.of(leftInt.value() * rightInt.value());
-            case ":/=" -> leftArr.values()[leftIndex.value()] = Value.of(leftInt.value() / rightInt.value());
-            default -> throw new IllegalStateException("Invalid assignment operator");
-          }
-        }
+        return new Finish(Value.UNIT);
       }
     }
-    throw new BadExpressionException("Only variables and index expressions can be assigned to");
+    throw new BadExpressionException("Only variables can be assigned to");
   }
   
   
@@ -258,10 +238,34 @@ public class ExprEvalVisitor extends PintBaseVisitor<ExprEvalControlFlow> {
     var factorFlow = ctx.factor().accept(this);
     if (!(factorFlow instanceof Finish factorFinish)) return factorFlow;
     if (!(factorFinish.value() instanceof ArrayValue factorValue)) throw new BadTypeException("Only arrays can be indexed");
-    var indexFlow = ctx.indexOp().accept(this);
-    if (!(indexFlow instanceof Finish indexFinish)) return indexFlow;
-    if (!(indexFinish.value() instanceof IntValue indexValue)) throw new BadTypeException("Array indices must be ints");
-    return new Finish(factorValue.values()[indexValue.value()]);
+    if (ctx.indexOp() instanceof IndexIndexOpContext indexIndexOpCtx) {
+      var indexFlow = indexIndexOpCtx.expr().accept(this);
+      if (!(indexFlow instanceof Finish indexFinish)) return indexFlow;
+      if (!(indexFinish.value() instanceof IntValue indexValue)) throw new BadTypeException("Array indices must be ints");
+      return new Finish(factorValue.values()[indexValue.value()]);
+    } else if (ctx.indexOp() instanceof SliceIndexOpContext sliceIndexOpCtx) {
+      var from = 0;
+      if (sliceIndexOpCtx.from != null) {
+        var fromFlow = sliceIndexOpCtx.from.accept(this);
+        if (!(fromFlow instanceof Finish fromFinish)) return fromFlow;
+        if (!(fromFinish.value() instanceof IntValue fromValue))
+          throw new BadTypeException("Array indices must be ints");
+        from = fromValue.value();
+      }
+      var to = factorValue.values().length;
+      if (sliceIndexOpCtx.to != null) {
+        var toFlow = sliceIndexOpCtx.to.accept(this);
+        if (!(toFlow instanceof Finish toFinish)) return toFlow;
+        if (!(toFinish.value() instanceof IntValue toValue)) throw new BadTypeException("Array indices must be ints");
+        to = toValue.value();
+      }
+      if (to < from) throw new BadTypeException("Array slice from index must be less than or equal to to index");
+      var newValues = new Value[to - from];
+      System.arraycopy(factorValue.values(), from, newValues, 0, newValues.length);
+      return new Finish(Value.of(newValues));
+    } else {
+      throw new IllegalStateException("Invalid array index operation");
+    }
   }
   
   @Override
@@ -448,18 +452,18 @@ public class ExprEvalVisitor extends PintBaseVisitor<ExprEvalControlFlow> {
   }
   
   @Override
-  public ExprEvalControlFlow visitIndexOp(IndexOpContext ctx) {
-    return ctx.expr().accept(this);
-  }
-  
-  @Override
   public ExprEvalControlFlow visitArrayLiteral(ArrayLiteralContext ctx) {
-    var exprs = ctx.expr();
-    var values = new ArrayList<Value>(exprs.size());
-    for (var expr : exprs) {
-      var flow = expr.accept(this);
-      if (flow instanceof Finish finish) values.add(finish.value());
-      else return flow;
+    var items = ctx.arrayLiteralItem();
+    var values = new ArrayList<Value>(items.size());
+    for (var item : items) {
+      var flow = item.expr().accept(this);
+      if (!(flow instanceof Finish finish)) return flow;
+      if (item.spread != null) {
+        if (!(finish.value() instanceof ArrayValue arrayValue)) throw new BadTypeException("Only arrays can be spread into arrays");
+        values.addAll(List.of(arrayValue.values()));
+      } else {
+        values.add(finish.value());
+      }
     }
     return new Finish(Value.of(values.toArray(Value[]::new)));
   }
