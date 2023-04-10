@@ -1,6 +1,9 @@
 let main() -> unit {
-  prints("Hello World!");
-  printi(factorial(5));
+  printsln("Hello World!");
+  let n: int := aski("Please enter a number: ");
+  printi(n);
+  prints("! = ");
+  printiln(factorial(n));
 }
 
 let x: int := 42;

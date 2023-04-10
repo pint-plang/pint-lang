@@ -15,6 +15,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Scanner;
+
+import static java.lang.Integer.parseInt;
 
 public class Main {
   
@@ -39,29 +42,72 @@ public class Main {
       file.accept(new ASTConversionVisitor()).accept(new ASTPrintVisitor(System.err));
     }
     System.out.println("-----------------------------------");
+    boolean errors;
     {
       var logger = new ErrorLogger<>(Type.ERROR);
       var typeEval = new TypeEvalVisitor(logger);
       var globals = new GlobalLookup();
-      addPrints(globals, logger);
+      addFunctions(globals, logger);
       var defs = new ASTConversionVisitor().visitFile(file);
       new TypecheckVisitor(typeEval, globals).visitDefs(defs);
-      if (!logger.dumpErrors(System.err)) System.out.println("No type errors detected");
+      errors = logger.dumpErrors(System.err);
+      if (!errors) System.out.println("No type errors detected");
     }
     System.out.println();
-    {
+    if (!errors) {
       var global = new GlobalScope();
-      global.defineFunction("print", (exprEval, vargs) -> {
-        for (var arg : vargs) System.out.println(arg.valueToString());
-        return Value.UNIT;
-      });
       global.defineFunction("prints", (exprEval, vargs) -> {
-        for (var arg : vargs) System.out.println(arg.valueToString());
+        if (!(vargs.get(0) instanceof StringValue arg)) throw new BadExpressionException("Expected a string");
+        System.out.print(arg.value());
         return Value.UNIT;
       });
       global.defineFunction("printi", (exprEval, vargs) -> {
-        for (var arg : vargs) System.out.println(arg.valueToString());
+        System.out.print(vargs.get(0).valueToString());
         return Value.UNIT;
+      });
+      global.defineFunction("printsln", (exprEval, vargs) -> {
+        if (!(vargs.get(0) instanceof StringValue arg)) throw new BadExpressionException("Expected a string");
+        System.out.println(arg.value());
+        return Value.UNIT;
+      });
+      global.defineFunction("printiln", (exprEval, vargs) -> {
+        System.out.println(vargs.get(0).valueToString());
+        return Value.UNIT;
+      });
+      global.defineFunction("println", (exprEval, vargs) -> {
+        System.out.println();
+        return Value.UNIT;
+      });
+      var in = new Scanner(System.in);
+      global.defineFunction("reads", (exprEval, vargs) -> {
+        var line = in.nextLine();
+        return Value.of(line);
+      });
+      global.defineFunction("readi", (exprEval, vargs) -> {
+        try {
+          var i = parseInt(in.nextLine());
+          return Value.of(i);
+        } catch (NumberFormatException e) {
+          System.err.println("IO error: expected an int");
+          throw exit(-1);
+        }
+      });
+      global.defineFunction("asks", (exprEval, vargs) -> {
+        if (!(vargs.get(0) instanceof StringValue arg)) throw new BadExpressionException("Expected a string");
+        System.out.print(arg.value());
+        var line = in.nextLine();
+        return Value.of(line);
+      });
+      global.defineFunction("aski", (exprEval, vargs) -> {
+        if (!(vargs.get(0) instanceof StringValue arg)) throw new BadExpressionException("Expected a string");
+        System.out.print(arg.value());
+        try {
+          var i = parseInt(in.nextLine());
+          return Value.of(i);
+        } catch (NumberFormatException e) {
+          System.err.println("IO error: expected an int");
+          throw exit(-1);
+        }
       });
       var varNames = new HashSet<String>();
       var vars = new ArrayList<Definition.Variable>();
@@ -99,9 +145,22 @@ public class Main {
     }
   }
   
-  private static void addPrints(GlobalLookup globals, ErrorLogger<?> logger) {
+  private static void addFunctions(GlobalLookup globals, ErrorLogger<?> logger) {
     globals.addFunction("prints", new GlobalLookup.FunctionType(Type.UNIT, List.of(new GlobalLookup.Param("s", Type.STRING))), logger);
     globals.addFunction("printi", new GlobalLookup.FunctionType(Type.UNIT, List.of(new GlobalLookup.Param("i", Type.INT))), logger);
+    globals.addFunction("printsln", new GlobalLookup.FunctionType(Type.UNIT, List.of(new GlobalLookup.Param("s", Type.STRING))), logger);
+    globals.addFunction("printiln", new GlobalLookup.FunctionType(Type.UNIT, List.of(new GlobalLookup.Param("i", Type.INT))), logger);
+    globals.addFunction("println", new GlobalLookup.FunctionType(Type.UNIT, List.of()), logger);
+    globals.addFunction("reads", new GlobalLookup.FunctionType(Type.STRING, List.of()), logger);
+    globals.addFunction("readi", new GlobalLookup.FunctionType(Type.INT, List.of()), logger);
+    globals.addFunction("asks", new GlobalLookup.FunctionType(Type.STRING, List.of(new GlobalLookup.Param("s", Type.STRING))), logger);
+    globals.addFunction("aski", new GlobalLookup.FunctionType(Type.INT, List.of(new GlobalLookup.Param("s", Type.STRING))), logger);
+  }
+  
+  // A hack to allow control flow analysis to understand that this exits from a function
+  public static RuntimeException exit(int code) {
+    System.exit(code);
+    throw new IllegalStateException("Good job, you broke Java!");
   }
   
 }
