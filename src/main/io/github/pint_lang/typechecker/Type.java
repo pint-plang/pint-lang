@@ -1,6 +1,7 @@
 package io.github.pint_lang.typechecker;
 
-import io.github.pint_lang.ast.ExprAST;
+import io.github.pint_lang.typechecker.conditions.AndCondition;
+import io.github.pint_lang.typechecker.conditions.ConditionBindings;
 
 public sealed interface Type {
   
@@ -25,7 +26,7 @@ public sealed interface Type {
     }
     
     @Override
-    public Type unify(Type other, ErrorLogger<Type> logger) {
+    public Type unify(Type other, ErrorLogger.Fixed<Type> logger) {
       return other == this || other == Type.NEVER ? this : other == Type.ERROR ? other : logger.error("Failed to unify types '" + this + "' and '" + other + "'");
     }
 
@@ -60,7 +61,7 @@ public sealed interface Type {
     }
   
     @Override
-    public Type unify(Type other, ErrorLogger<Type> logger) {
+    public Type unify(Type other, ErrorLogger.Fixed<Type> logger) {
       return switch (this) {
         case ERROR -> this;
         case NEVER -> other;
@@ -96,7 +97,7 @@ public sealed interface Type {
     }
   
     @Override
-    public Type unify(Type other, ErrorLogger<Type> logger) {
+    public Type unify(Type other, ErrorLogger.Fixed<Type> logger) {
       return other instanceof Array otherArray ? new Array(elementType.unify(otherArray.elementType, logger)) : other == Type.NEVER ? this : other == Type.ERROR ? other : logger.error("Failed to unify types '" + this + "' and '" + other + "'");
     }
 
@@ -112,44 +113,46 @@ public sealed interface Type {
     
   }
 
-  record Condition(Type type, ExprAST<Type> condition) implements Type {
-
+  record Condition(Type type, io.github.pint_lang.typechecker.conditions.Condition condition, ConditionBindings bindings) implements Type {
+    
     public Condition {
       if (type == null) throw new NullPointerException("type must not be null");
     }
-
+    
     @Override
     public boolean canBe(Type other) {
-      return this.equals(other) || type.canBe(other) || other == Type.NEVER;
+      return other instanceof Condition otherCondition && type.equals(otherCondition.type) && condition.satisfies(otherCondition.condition) && bindings.equals(otherCondition.bindings) || type.canBe(other) || other == Type.NEVER;
     }
 
     @Override
-    public Type unify(Type other, ErrorLogger<Type> logger) {
+    public Type unify(Type other, ErrorLogger.Fixed<Type> logger) { // todo: uhh... this should probably check that the conditions actually work... but... it's probably fine
       return this.equals(other) ? this :
-             other instanceof Condition otherCondition ? this.type.unify(otherCondition.type, logger) :
-             this.type.unify(other, logger);
+        other instanceof Condition otherCondition ? this.type.unify(otherCondition.type, logger) :
+          this.type.unify(other, logger);
     }
-
+    
     @Override
     public Type.Array asArray() {
       return type.asArray();
     }
-
+    
     @Override
-    public Type unconditional() {
-      return type.unconditional();
+    public Condition joinCondition(io.github.pint_lang.typechecker.conditions.Condition condition, ConditionBindings bindings) {
+      var merge = this.bindings.merge(bindings);
+      var left = this.condition.mapInputs(merge.thisToNewMapping());
+      var right = condition.mapInputs(merge.otherToNewMapping());
+      return new Condition(type, new AndCondition(left, right), merge.merged());
     }
-
+    
   }
 
-  // NOTE: this relationship will become a lot more important once type conditions exist
   boolean canBe(Type other);
   
   default boolean eitherCanBe(Type other) {
     return this.canBe(other) || other.canBe(this);
   }
   
-  Type unify(Type other, ErrorLogger<Type> logger);
+  Type unify(Type other, ErrorLogger.Fixed<Type> logger);
 
   Type.Array asArray();
 
@@ -157,10 +160,10 @@ public sealed interface Type {
     return asArray() != null;
   }
 
-  default Type unconditional() {
-    return this;
+  default Condition joinCondition(io.github.pint_lang.typechecker.conditions.Condition condition, ConditionBindings bindings) {
+    return new Condition(this, condition, bindings);
   }
-
+  
   @Override
   boolean equals(Object other);
   

@@ -30,17 +30,17 @@ public class GlobalLookup {
     this.current = current;
   }
   
-  public void addVariable(String name, Type type, ErrorLogger<?> logger) {
+  public void addVariable(String name, Type type, ErrorLogger logger) {
     if (funcs.containsKey(name)) {
-      logger.error("Duplicate global '" + name + "'");
+      logger.error("Duplicate global '" + name + "'", null);
       return;
     }
     vars.put(name, type);
   }
   
-  public void addFunction(String name, FunctionType type, ErrorLogger<?> logger) {
+  public void addFunction(String name, FunctionType type, ErrorLogger logger) {
     if (vars.containsKey(name)) {
-      logger.error("Duplicate global '" + name + "'");
+      logger.error("Duplicate global '" + name + "'", null);
       return;
     }
     funcs.put(name, type);
@@ -53,11 +53,11 @@ public class GlobalLookup {
   public class BuildVisitor implements DefASTVisitor<Void, Void> {
     
     private final TypecheckVisitor typechecker;
-    private final ErrorLogger<Type> logger;
+    private final ErrorLogger logger;
     
     public BuildVisitor(TypecheckVisitor typechecker) {
       this.typechecker = typechecker;
-      this.logger = typechecker.logger;
+      this.logger = typechecker.logger.parent();
     }
     
     @Override

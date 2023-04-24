@@ -13,7 +13,7 @@ public abstract sealed class JumpScope {
     return type;
   }
   
-  public Type unifyType(Type other, ErrorLogger<Type> logger) {
+  public Type unifyType(Type other, ErrorLogger.Fixed<Type> logger) {
     type = type.unify(other, logger);
     return type;
   }

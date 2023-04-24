@@ -6,4 +6,9 @@ public sealed interface AST<T> permits DefsAST, DefAST, TypeAST, StatAST {
   
   <R> R accept(ASTVisitor<T, R> visitor);
   
+  @Override
+  boolean equals(Object o);
+  
+  int hashCode();
+  
 }

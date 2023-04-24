@@ -11,23 +11,19 @@ let main() -> unit {
     let j: int := i + 1;
     if i > 0 and i <= |arr| then {
       if j > 0 and j <= |arr| then {
-        //printis([...arr[...i], 7, ...arr[j...]]);
-      }
+        printis([...arr[...i], 7, ...arr[j...]]);
+      };
     };
-  }
+  };
 }
 
 let printis(is: int[]) -> unit {
   let i: int := 0;
   prints("[");
-  while i < |is| loop {
-    if i >= 0 and i < |is| then {
-      printi(is[i]);
-      prints(", ");
-    } else {
-      prints("wut");
-    };
-    i := i + 1;
+  while i >= 0 and i < |is| loop {
+    printi(is[i]);
+    prints(", ");
+    i :+= 1;
   };
   printsln("]");
 }

@@ -1,26 +1,29 @@
 package io.github.pint_lang.typechecker;
 
 import io.github.pint_lang.ast.*;
+import io.github.pint_lang.typechecker.conditions.*;
 
 import java.util.ArrayList;
 import java.util.Stack;
 
 public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisitor<Void, ExprAST<Type>>, TypeASTVisitor<Void, TypeAST<Type>> {
 
-  public final ErrorLogger<Type> logger;
+  public final ErrorLogger.Fixed<Type> logger;
   public final GlobalLookup globals;
   private final GlobalLookup.BuildVisitor globalsBuilder;
   private final JumpScopeStack jumpStack;
   private final VarScopeStack varStack;
   private final Stack<Type> itStack = new Stack<>();
   private final StatVisitor statVisitor = new StatVisitor();
+  private final ConditionBuildVisitor conditionBuildVisitor;
   
-  public TypecheckVisitor(ErrorLogger<Type> logger, GlobalLookup globals) {
+  public TypecheckVisitor(ErrorLogger.Fixed<Type> logger, GlobalLookup globals) {
     this.logger = logger;
     this.globals = globals;
     this.globalsBuilder = globals.new BuildVisitor(this);
     this.jumpStack = new JumpScopeStack();
     this.varStack = new VarScopeStack();
+    this.conditionBuildVisitor = new ConditionBuildVisitor(logger.parent());
   }
   
   public void visitDefs(DefsAST<Void> ast) {
@@ -35,7 +38,7 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
     var funcType = globals.getFunctionType(ast.name());
     globals.setThisFunctionType(funcType);
     var value = ast.body().accept(this);
-    if (!value.data().canBe(funcType.returnType())) logger.error("Tried to return wrong type");
+    if (value.data() != Type.ERROR && !value.data().canBe(funcType.returnType())) logger.error("Tried to return wrong type");
     globals.setThisFunctionType(null);
     return null;
   }
@@ -74,9 +77,10 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
   public ConditionTypeAST<Type> visitConditionType(ConditionTypeAST<Void> ast) {
     var type = ast.type().accept(this);
     itStack.push(type.data());
-    var condition = ast.condition().accept(this);
+    var conditionAST = ast.condition().accept(this);
+    var condition = conditionAST.accept(conditionBuildVisitor);
     itStack.pop();
-    return new ConditionTypeAST<>(type, condition, new Type.Condition(type.data(), condition));
+    return new ConditionTypeAST<>(type, conditionAST, new Type.Condition(type.data(), condition, conditionBuildVisitor.takeBindings()));
   }
   
   @Override
@@ -145,10 +149,7 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
   public VarExprAST<Type> visitVarExprAST(VarExprAST<Void> ast) {
     var name = ast.name();
     var local = varStack.getVar(name);
-    if (local != null) {
-      if (!itStack.isEmpty()) local = local.unconditional();
-      return new VarExprAST<>(name, local);
-    }
+    if (local != null) return new VarExprAST<>(name, local);
     var params = globals.getThisFunctionType().params();
     for (var param : params) if (param.name().equals(name)) return new VarExprAST<>(name, param.type());
     var global = globals.getVariableType(name);
@@ -181,34 +182,28 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
     if (indexee.data() == Type.ERROR || index.data() == Type.ERROR) return new IndexExprAST<>(indexee, index, Type.ERROR);
     var indexeeArray = indexee.data().asArray();
     if (indexeeArray == null) return new IndexExprAST<>(indexee, index, logger.error("Only arrays can be indexed"));
-    // todo: I realized that the condition is inverted, so this isn't actually working at all. I'll fix it later
-    if (index.data().canBe(arrayIndexCondition(indexee))) return new IndexExprAST<>(indexee, index, logger.error("Only int when it >= 0 and it < |<arr>| can be used as indices for array <arr>"));
+    if (!index.data().canBe(arrayIndexCondition(indexee))) return new IndexExprAST<>(indexee, index, logger.error("Only int when it >= 0 and it < |<arr>| can be used as indices for array <arr>"));
     return new IndexExprAST<>(indexee, index, indexeeArray.elementType());
   }
-
+  
   private Type.Condition arrayIndexCondition(ExprAST<Type> indexee) {
+    var itCondition = new ItExprAST<>(Type.INT).accept(conditionBuildVisitor);
+    var indexeeCondition = indexee.accept(conditionBuildVisitor);
     return new Type.Condition(
       Type.INT,
-      new BinaryExprAST<>(
-        BinaryOp.AND,
-        new BinaryExprAST<>(
-          BinaryOp.GE,
-          new ItExprAST<>(Type.INT),
-          new IntLiteralExprAST<>(0, Type.INT),
-          Type.BOOL
+      AndCondition.and(
+        CmpCondition.ge(
+          itCondition,
+          ConstantCondition.integer(0)
         ),
-        new BinaryExprAST<>(
-          BinaryOp.LT,
-          new ItExprAST<>(Type.INT),
-          new UnaryExprAST<>(
-            UnaryOp.ABS,
-            indexee,
-            Type.INT
-          ),
-          Type.BOOL
-        ),
-        Type.BOOL
-      )
+        CmpCondition.lt(
+          itCondition,
+          UnaryCondition.abs(
+            indexeeCondition
+          )
+        )
+      ),
+      conditionBuildVisitor.takeBindings()
     );
   }
   
@@ -220,68 +215,58 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
     if (slicee.data() == Type.ERROR || from != null && from.data() == Type.ERROR || to != null && to.data() == Type.ERROR) return new SliceExprAST<>(slicee, from, to, Type.ERROR);
     var sliceeArray = slicee.data().asArray();
     if (sliceeArray == null) return new SliceExprAST<>(slicee, from, to, logger.error("Only arrays can be sliced"));
-    // todo: see line 184
-    if (from != null && from.data().canBe(arraySliceFrom(slicee))) return new SliceExprAST<>(slicee, from, to, logger.error("Only int when it >= 0 and it <= |<arr>| can be used as from indices for slicing array <arr>"));
-    if (to != null && to.data().canBe(arraySliceTo(slicee, from))) return new SliceExprAST<>(slicee, from, to, logger.error("Only int when it >= <from> and it <= |<arr>| can be used as to indices for slicing array <arr>"));
+    if (from != null && !from.data().canBe(arraySliceFrom(slicee))) return new SliceExprAST<>(slicee, from, to, logger.error("Only int when it >= 0 and it <= |<arr>| can be used as from indices for slicing array <arr>"));
+    if (to != null && !to.data().canBe(arraySliceTo(slicee, from))) return new SliceExprAST<>(slicee, from, to, logger.error("Only int when it >= <from> and it <= |<arr>| can be used as to indices for slicing array <arr>"));
     return new SliceExprAST<>(slicee, from, to, new Type.Array(sliceeArray.elementType()));
   }
   
   private Type.Condition arraySliceFrom(ExprAST<Type> slicee) {
+    var itCondition = new ItExprAST<>(Type.INT).accept(conditionBuildVisitor);
+    var sliceeCondition = slicee.accept(conditionBuildVisitor);
     return new Type.Condition(
       Type.INT,
-      new BinaryExprAST<>(
-        BinaryOp.AND,
-        new BinaryExprAST<>(
-          BinaryOp.GE,
-          new ItExprAST<>(Type.INT),
-          new IntLiteralExprAST<>(0, Type.INT),
-          Type.BOOL
+      AndCondition.and(
+        CmpCondition.ge(
+          itCondition,
+          ConstantCondition.integer(0)
         ),
-        new BinaryExprAST<>(
-          BinaryOp.LE,
-          new ItExprAST<>(Type.INT),
-          new UnaryExprAST<>(
-            UnaryOp.ABS,
-            slicee,
-            Type.INT
-          ),
-          Type.BOOL
-        ),
-        Type.BOOL
-      )
+        CmpCondition.le(
+          itCondition,
+          UnaryCondition.abs(
+            sliceeCondition
+          )
+        )
+      ),
+      conditionBuildVisitor.takeBindings()
     );
   }
   
   private Type.Condition arraySliceTo(ExprAST<Type> slicee, ExprAST<Type> from) {
+    var itCondition = new ItExprAST<>(Type.INT).accept(conditionBuildVisitor);
+    var sliceeCondition = slicee.accept(conditionBuildVisitor);
+    var fromCondition = from != null ? from.accept(conditionBuildVisitor) : ConstantCondition.integer(0);
     return new Type.Condition(
       Type.INT,
-      new BinaryExprAST<>(
-        BinaryOp.AND,
-        new BinaryExprAST<>(
-          BinaryOp.GE,
-          new ItExprAST<>(Type.INT),
-          from != null ? from : new IntLiteralExprAST<>(0, Type.INT),
-          Type.BOOL
+      AndCondition.and(
+        CmpCondition.ge(
+          itCondition,
+          fromCondition
         ),
-        new BinaryExprAST<>(
-          BinaryOp.LE,
-          new ItExprAST<>(Type.INT),
-          new UnaryExprAST<>(
-            UnaryOp.ABS,
-            slicee,
-            Type.INT
-          ),
-          Type.BOOL
-        ),
-        Type.BOOL
-      )
+        CmpCondition.le(
+          itCondition,
+          UnaryCondition.abs(
+            sliceeCondition
+          )
+        )
+      ),
+      conditionBuildVisitor.takeBindings()
     );
   }
   
   @Override
   public ItExprAST<Type> visitItExpr(ItExprAST<Void> ast) {
     if (itStack.isEmpty()) return new ItExprAST<>(logger.error("It must only be in a type condition"));
-    return new ItExprAST<>(itStack.peek().unconditional());
+    return new ItExprAST<>(itStack.peek());
   }
   
   @Override
@@ -290,8 +275,9 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
     var vars = condition.accept(new VariableFindVisitor());
     varStack.push();
     for (var var : vars) {
-      var typeCondition = condition.accept(new ConditionMapVisitor(var.name()));
-      varStack.putVar(var.name(), new Type.Condition(var.data(), typeCondition));
+      var mapper = new ConditionMapVisitor(var.name(), logger.parent());
+      var typeCondition = condition.accept(mapper);
+      varStack.putVar(var.name(), var.data().joinCondition(typeCondition, mapper.takeBindings()));
     }
     var thenBody = ast.thenBody().accept(this);
     varStack.pop();
@@ -319,7 +305,15 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
     var condition = ast.condition().accept(this);
     var type = condition.data() == Type.BOOL ? Type.UNIT : condition.data() == Type.ERROR ? Type.ERROR : logger.error("While conditions must be booleans");
     jumpStack.peek().unifyType(type, logger);
+    var vars = condition.accept(new VariableFindVisitor());
+    varStack.push();
+    for (var var : vars) {
+      var mapper = new ConditionMapVisitor(var.name(), logger.parent());
+      var typeCondition = condition.accept(mapper);
+      varStack.putVar(var.name(), var.data().joinCondition(typeCondition, mapper.takeBindings()));
+    }
     var body = ast.body().accept(this);
+    varStack.pop();
     type = jumpStack.pop().getType();
     if (body.data() == Type.ERROR) type = Type.ERROR;
     return new WhileExprAST<>(ast.label(), condition, body, type);
@@ -334,7 +328,7 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
         if (ast.targetLabel() != null) type = logger.error("return can't target a label");
         var funcType = globals.getThisFunctionType();
         if (funcType == null) type = logger.error("Cannot return here");
-        else if (!(value != null ? value.data() : Type.UNIT).canBe(funcType.returnType())) type = logger.error("Tried to return wrong type");
+        else if ((value == null || value.data() != Type.ERROR) && !(value != null ? value.data() : Type.UNIT).canBe(funcType.returnType())) type = logger.error("Tried to return wrong type");
         yield new JumpExprAST<>(JumpKind.RETURN, ast.targetLabel(), value, type);
       }
       case BREAK -> {
@@ -369,9 +363,13 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
       if (item.spread()) {
         var spreadee = item.item().accept(this);
         elements.add(new ArrayLiteralExprAST.Item<>(spreadee, true));
-        var spreadeeArray = spreadee.data().asArray();
-        if (spreadeeArray != null) elementType = elementType.unify(spreadeeArray.elementType(), logger);
-        else elementType = logger.error("Only arrays can be spread into arrays");
+        if (spreadee.data() == Type.ERROR) {
+          elementType = Type.ERROR;
+        } else {
+          var spreadeeArray = spreadee.data().asArray();
+          if (spreadeeArray != null) elementType = elementType.unify(spreadeeArray.elementType(), logger);
+          else elementType = logger.error("Only arrays can be spread into arrays");
+        }
       } else {
         var element = item.item().accept(this);
         elements.add(new ArrayLiteralExprAST.Item<>(element, false));
@@ -420,6 +418,132 @@ public class TypecheckVisitor implements DefASTVisitor<Void, Void>, ExprASTVisit
     @Override
     public NopStatAST<Type> visitNopStat(NopStatAST<Void> ast) {
       return new NopStatAST<>(Type.UNIT);
+    }
+    
+  }
+  
+  private static class ConditionBuildVisitor implements ExprASTVisitor<Type, Condition> {
+    
+    private final ConditionBindings.Builder bindings = new ConditionBindings.Builder();
+    private final ErrorLogger.Fixed<Condition> logger;
+    
+    private ConditionBuildVisitor(ErrorLogger logger) {
+      this.logger = logger.fix(new ErrorCondition());
+    }
+    
+    public ConditionBindings takeBindings() {
+      return bindings.finishAndReset();
+    }
+    
+    @Override
+    public Condition visitUnaryExpr(UnaryExprAST<Type> ast) {
+      var operand = ast.operand().accept(this);
+      return switch (ast.op()) {
+        case PLUS -> UnaryCondition.plus(operand);
+        case NEG -> UnaryCondition.neg(operand);
+        case NOT -> UnaryCondition.not(operand);
+        case ABS -> UnaryCondition.abs(operand);
+      };
+    }
+    
+    @Override
+    public Condition visitBinaryExpr(BinaryExprAST<Type> ast) {
+      var left = ast.left().accept(this);
+      var right = ast.right().accept(this);
+      return switch (ast.op()) {
+        case ASSIGN, ADD_ASSIGN, SUB_ASSIGN, MUL_ASSIGN, DIV_ASSIGN -> logger.error("Assignment operators are not supported in type conditions");
+        case OR -> OrCondition.or(left, right);
+        case AND -> AndCondition.and(left, right);
+        case EQ -> CmpCondition.eq(left, right);
+        case NEQ -> CmpCondition.neq(left, right);
+        case LT -> CmpCondition.lt(left, right);
+        case NLT -> CmpCondition.nlt(left, right);
+        case LE -> CmpCondition.le(left, right);
+        case NLE -> CmpCondition.nle(left, right);
+        case GT -> CmpCondition.gt(left, right);
+        case NGT -> CmpCondition.ngt(left, right);
+        case GE -> CmpCondition.ge(left, right);
+        case NGE -> CmpCondition.nge(left, right);
+        case ADD -> BinaryCondition.add(left, right);
+        case SUB -> BinaryCondition.sub(left, right);
+        case MUL -> BinaryCondition.mul(left, right);
+        case DIV -> BinaryCondition.div(left, right);
+      };
+    }
+    
+    @Override
+    public Condition visitBlockExpr(BlockExprAST<Type> ast) {
+      return logger.error("Block expressions are not supported in type conditions");
+    }
+    
+    @Override
+    public Condition visitVarExprAST(VarExprAST<Type> ast) {
+      return bindings.getOrBindVar(ast.name());
+    }
+    
+    @Override
+    public Condition visitFuncCall(FuncCallExprAST<Type> ast) {
+      return logger.error("Function calls are not supported in type conditions (yet)");
+    }
+    
+    @Override
+    public Condition visitIndexExpr(IndexExprAST<Type> ast) {
+      return logger.error("Index expressions are not supported in type conditions (yet)");
+    }
+    
+    @Override
+    public Condition visitSliceExpr(SliceExprAST<Type> ast) {
+      return logger.error("Slice expressions are not supported in type conditions (yet)");
+    }
+    
+    @Override
+    public Condition visitItExpr(ItExprAST<Type> ast) {
+      return bindings.getOrBindIt();
+    }
+    
+    @Override
+    public Condition visitIfExpr(IfExprAST<Type> ast) {
+      return logger.error("If expressions are not supported in type conditions");
+    }
+    
+    @Override
+    public Condition visitLoopExpr(LoopExprAST<Type> ast) {
+      return logger.error("Loops are not supported in type conditions");
+    }
+    
+    @Override
+    public Condition visitWhileExpr(WhileExprAST<Type> ast) {
+      return logger.error("While loops are not supported in type conditions");
+    }
+    
+    @Override
+    public Condition visitJumpExpr(JumpExprAST<Type> ast) {
+      return logger.error("Jump expressions are not supported in type conditions");
+    }
+    
+    @Override
+    public Condition visitArrayLiteralExpr(ArrayLiteralExprAST<Type> ast) {
+      return ArrayCondition.array(ast.items().stream().map(item -> new ArrayCondition.Item(item.item().accept(this), item.spread())).toList());
+    }
+    
+    @Override
+    public Condition visitStringLiteralExpr(StringLiteralExprAST<Type> ast) {
+      return ConstantCondition.string(ast.value());
+    }
+    
+    @Override
+    public Condition visitIntLiteralExpr(IntLiteralExprAST<Type> ast) {
+      return ConstantCondition.integer(ast.value());
+    }
+    
+    @Override
+    public Condition visitBoolLiteralExpr(BoolLiteralExprAST<Type> ast) {
+      return ConstantCondition.bool(ast.value());
+    }
+    
+    @Override
+    public Condition visitUnitLiteralExpr(UnitLiteralExprAST<Type> ast) {
+      return ConstantCondition.unit();
     }
     
   }

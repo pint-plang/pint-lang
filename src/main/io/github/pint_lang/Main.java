@@ -44,9 +44,9 @@ public class Main {
     System.out.println("-----------------------------------");
     boolean errors;
     {
-      var logger = new ErrorLogger<>(Type.ERROR);
+      var logger = ErrorLogger.fixed(Type.ERROR);
       var globals = new GlobalLookup();
-      declareFunctions(globals, logger);
+      declareFunctions(globals, logger.parent());
       var defs = new ASTConversionVisitor().visitFile(file);
       new TypecheckVisitor(logger, globals).visitDefs(defs);
       errors = logger.dumpErrors(System.err);
@@ -92,7 +92,7 @@ public class Main {
     }
   }
   
-  private static void declareFunctions(GlobalLookup globals, ErrorLogger<?> logger) {
+  private static void declareFunctions(GlobalLookup globals, ErrorLogger logger) {
     globals.addFunction("prints", new GlobalLookup.FunctionType(Type.UNIT, List.of(new GlobalLookup.Param("s", Type.STRING))), logger);
     globals.addFunction("printi", new GlobalLookup.FunctionType(Type.UNIT, List.of(new GlobalLookup.Param("i", Type.INT))), logger);
     globals.addFunction("printsln", new GlobalLookup.FunctionType(Type.UNIT, List.of(new GlobalLookup.Param("s", Type.STRING))), logger);

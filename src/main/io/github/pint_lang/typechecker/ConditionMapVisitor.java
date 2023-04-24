@@ -1,125 +1,137 @@
 package io.github.pint_lang.typechecker;
 
 import io.github.pint_lang.ast.*;
+import io.github.pint_lang.typechecker.conditions.*;
+import io.github.pint_lang.typechecker.conditions.ErrorCondition;
 
-public class ConditionMapVisitor implements ExprASTVisitor<Type, ExprAST<Type>> {
+public class ConditionMapVisitor implements ExprASTVisitor<Type, Condition> {
 
     private final String varName;
-    private boolean isShadowed = false;
-    private final StatVisitor statVisitor;
-
-    public ConditionMapVisitor(String varName) {
+    
+    private final ConditionBindings.Builder bindings = new ConditionBindings.Builder();
+    
+    // todo: this might be the wrong approach; I think these errors will appear if the condition of an if expression contains complex expressions, not if an actual type condition does; I'm leaving it as-is for now.
+    private final ErrorLogger.Fixed<Condition> logger;
+    
+    public ConditionMapVisitor(String varName, ErrorLogger logger) {
         this.varName = varName;
-        statVisitor = this.new StatVisitor();
+        this.logger = logger.fix(new ErrorCondition());
     }
-
-    @Override
-    public ExprAST<Type> visitUnaryExpr(UnaryExprAST<Type> ast) {
-        return new UnaryExprAST<>(ast.op(), ast.operand().accept(this), ast.data());
-    }
-
-    @Override
-    public ExprAST<Type> visitBinaryExpr(BinaryExprAST<Type> ast) {
-        return new BinaryExprAST<>(ast.op(), ast.left().accept(this), ast.right().accept(this), ast.data());
-    }
-
-    @Override
-    public ExprAST<Type> visitBlockExpr(BlockExprAST<Type> ast) {
-        if (isShadowed) return ast;
-        var stats = ast.stats().stream().map(statVisitor::visitStat).toList();
-        isShadowed = false;
-        return new BlockExprAST<>(ast.label(), stats, ast.data());
-    }
-
-    @Override
-    public ExprAST<Type> visitVarExprAST(VarExprAST<Type> ast) {
-        return varName.equals(ast.name()) ? new ItExprAST<>(ast.data()) : ast;
-    }
-
-    @Override
-    public ExprAST<Type> visitFuncCall(FuncCallExprAST<Type> ast) {
-        return new FuncCallExprAST<>(ast.funcName(), ast.args().stream().map(this::visitExpr).toList(), ast.data());
-    }
-
-    @Override
-    public ExprAST<Type> visitIndexExpr(IndexExprAST<Type> ast) {
-        return new IndexExprAST<>(ast.indexee().accept(this), ast.index().accept(this), ast.data());
+    
+    public ConditionBindings takeBindings() {
+        return bindings.finishAndReset();
     }
     
     @Override
-    public ExprAST<Type> visitSliceExpr(SliceExprAST<Type> ast) {
-        return new SliceExprAST<>(ast.slicee().accept(this), ast.from().accept(this), ast.to().accept(this), ast.data());
+    public Condition visitUnaryExpr(UnaryExprAST<Type> ast) {
+        var operand = ast.operand().accept(this);
+        return switch (ast.op()) {
+            case PLUS -> UnaryCondition.plus(operand);
+            case NEG -> UnaryCondition.neg(operand);
+            case NOT -> UnaryCondition.not(operand);
+            case ABS -> UnaryCondition.abs(operand);
+        };
     }
     
     @Override
-    public ExprAST<Type> visitItExpr(ItExprAST<Type> ast) {
-        System.err.println("warning: ConditionMapVisitor.visitItExpr was called; please investigate");
-        return ast;
+    public Condition visitBinaryExpr(BinaryExprAST<Type> ast) {
+        var left = ast.left().accept(this);
+        var right = ast.right().accept(this);
+        return switch (ast.op()) {
+            case ASSIGN, ADD_ASSIGN, SUB_ASSIGN, MUL_ASSIGN, DIV_ASSIGN -> logger.error("Assignment operators are not allowed in type conditions");
+            case OR -> OrCondition.or(left, right);
+            case AND -> AndCondition.and(left, right);
+            case EQ -> CmpCondition.eq(left, right);
+            case NEQ -> CmpCondition.neq(left, right);
+            case LT -> CmpCondition.lt(left, right);
+            case NLT -> CmpCondition.nlt(left, right);
+            case LE -> CmpCondition.le(left, right);
+            case NLE -> CmpCondition.nle(left, right);
+            case GT -> CmpCondition.gt(left, right);
+            case NGT -> CmpCondition.ngt(left, right);
+            case GE -> CmpCondition.ge(left, right);
+            case NGE -> CmpCondition.nge(left, right);
+            case ADD -> BinaryCondition.add(left, right);
+            case SUB -> BinaryCondition.sub(left, right);
+            case MUL -> BinaryCondition.mul(left, right);
+            case DIV -> BinaryCondition.div(left, right);
+        };
     }
-
+    
     @Override
-    public ExprAST<Type> visitIfExpr(IfExprAST<Type> ast) {
-        return new IfExprAST<>(ast.condition().accept(this), ast.thenBody().accept(this), ast.elseBody().accept(this), ast.data());
+    public Condition visitBlockExpr(BlockExprAST<Type> ast) {
+        return logger.error("Block expressions are not supported in type conditions");
     }
-
+    
     @Override
-    public ExprAST<Type> visitLoopExpr(LoopExprAST<Type> ast) {
-        return new LoopExprAST<>(ast.label(), ast.body().accept(this), ast.data());
+    public Condition visitVarExprAST(VarExprAST<Type> ast) {
+        if (ast.name().equals(varName)) return bindings.getOrBindIt();
+        else return bindings.getOrBindVar(ast.name());
     }
-
+    
     @Override
-    public ExprAST<Type> visitWhileExpr(WhileExprAST<Type> ast) {
-        return new WhileExprAST<>(ast.label(), ast.condition().accept(this), ast.body().accept(this), ast.data());
+    public Condition visitFuncCall(FuncCallExprAST<Type> ast) {
+        return logger.error("Function calls are not supported in type conditions (yet)"); // todo
     }
-
+    
     @Override
-    public ExprAST<Type> visitJumpExpr(JumpExprAST<Type> ast) {
-        return new JumpExprAST<>(ast.kind(), ast.targetLabel(), ast.value().accept(this), ast.data());
+    public Condition visitIndexExpr(IndexExprAST<Type> ast) {
+        return logger.error("Index expressions are not supported in type conditions (yet)");
     }
-
+    
     @Override
-    public ExprAST<Type> visitArrayLiteralExpr(ArrayLiteralExprAST<Type> ast) {
-        return new ArrayLiteralExprAST<>(ast.items().stream().map(item -> new ArrayLiteralExprAST.Item<>(item.item().accept(this), item.spread())).toList(), ast.data());
+    public Condition visitSliceExpr(SliceExprAST<Type> ast) {
+        return logger.error("Slice expressions are not supported in type conditions (yet)");
     }
-
+    
     @Override
-    public StringLiteralExprAST<Type> visitStringLiteralExpr(StringLiteralExprAST<Type> ast) {
-        return ast;
+    public Condition visitItExpr(ItExprAST<Type> ast) {
+        return logger.error("ConditionMapVisitor::visitItExpr; I'm not sure whether this is a problem");
     }
-
+    
     @Override
-    public IntLiteralExprAST<Type> visitIntLiteralExpr(IntLiteralExprAST<Type> ast) {
-        return ast;
+    public Condition visitIfExpr(IfExprAST<Type> ast) {
+        return logger.error("if expressions are not supported in type conditions");
     }
-
+    
     @Override
-    public BoolLiteralExprAST<Type> visitBoolLiteralExpr(BoolLiteralExprAST<Type> ast) {
-        return ast;
+    public Condition visitLoopExpr(LoopExprAST<Type> ast) {
+        return logger.error("loops are not supported in type conditions");
     }
-
+    
     @Override
-    public UnitLiteralExprAST<Type> visitUnitLiteralExpr(UnitLiteralExprAST<Type> ast) {
-        return ast;
+    public Condition visitWhileExpr(WhileExprAST<Type> ast) {
+        return logger.error("while loops are not supported in type conditions");
     }
-
-    private class StatVisitor extends ExprDelegateStatASTVisitor<Type, StatAST<Type>> {
-
-        public StatVisitor() {
-            super(ConditionMapVisitor.this);
-        }
-
-        @Override
-        public StatAST<Type> visitVarDef(VarDefAST<Type> ast) {
-            var value = ast.value().accept(ConditionMapVisitor.this);
-            if (ast.name().equals(varName)) isShadowed = true;
-            return new VarDefAST<>(ast.name(), ast.type(), value, ast.data());
-        }
-
-        @Override
-        public StatAST<Type> visitNopStat(NopStatAST<Type> ast) {
-            return ast;
-        }
-
+    
+    @Override
+    public Condition visitJumpExpr(JumpExprAST<Type> ast) {
+        return logger.error("jump expressions are not supported in type conditions");
+    }
+    
+    @Override
+    public Condition visitArrayLiteralExpr(ArrayLiteralExprAST<Type> ast) {
+        return ArrayCondition.array(ast.items().stream().map(item -> new ArrayCondition.Item(item.item().accept(this), item.spread())).toList());
+    }
+    
+    @Override
+    public Condition visitStringLiteralExpr(StringLiteralExprAST<Type> ast) {
+        return ConstantCondition.string(ast.value());
+    }
+    
+    @Override
+    public Condition visitIntLiteralExpr(IntLiteralExprAST<Type> ast) {
+        return ConstantCondition.integer(ast.value());
+    }
+    
+    @Override
+    public Condition visitBoolLiteralExpr(BoolLiteralExprAST<Type> ast) {
+        return ConstantCondition.bool(ast.value());
+    }
+    
+    @Override
+    public Condition visitUnitLiteralExpr(UnitLiteralExprAST<Type> ast) {
+        return ConstantCondition.unit();
     }
 
 }
