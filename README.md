@@ -1,0 +1,3 @@
+# Pint
+
+The goal of this project is to design and develop a programming language called Pint. This will be facilitated by using ANTLR4 to generate a parser. Pint will use an innovative concept called "type conditions" to be efficient at run time without sacrificing safety at compile time. With type conditions, Pint will prevent invalid or unsafe abuses of array indexing, function calls, and similar constructs by enforcing boundary checks, input validation, and other restrictions.

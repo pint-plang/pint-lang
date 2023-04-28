@@ -1,9 +1,9 @@
 let main() -> unit {
   printsln("Hello World!");
-  /*let n: int := aski("Please enter a number: ");
+  let n: int := aski("Please enter a number: ");
   printi(n);
   prints("! = ");
-  printiln(factorial(n));*/
+  printiln(factorial(n));
   let arr: int[] := [3, 2, 1, 42];
   printis(arr);
   {

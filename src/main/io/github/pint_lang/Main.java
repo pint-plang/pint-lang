@@ -34,14 +34,6 @@ public class Main {
     var tokens = new CommonTokenStream(lexer);
     var parser = new PintParser(tokens);
     var file = parser.file();
-    {
-      file.accept(new PrintVisitor(System.err));
-    }
-    System.out.println("-----------------------------------");
-    {
-      file.accept(new ASTConversionVisitor()).accept(new ASTPrintVisitor(System.err));
-    }
-    System.out.println("-----------------------------------");
     boolean errors;
     {
       var logger = ErrorLogger.fixed(Type.ERROR);
